@@ -1,0 +1,246 @@
+---
+title: "Untitled"
+author: "Mizza"
+date: "2024-07-08"
+output: html_document
+---
+
+```{r}
+#| label: setup
+#| warning: false
+#| echo: false
+
+library(ggplot2)
+library(readxl)
+library(dplyr)
+library(tidyverse)
+library(tidyr)
+library(survey)
+library(ggsankey)
+
+Household <- read_excel("C:/Users/mizza/OneDrive/Desktop/CMD/2. LASI/2_LASI_W1_Household_v4 1.xlsx")
+Individual <- read_excel("C:/Users/mizza/OneDrive/Desktop/CMD/2. LASI/3_LASI_W1_Individual_data 1.xlsx")
+merged_data <- merge (Individual, Household, by = "hhid", all = TRUE)
+roster <- read_excel ("C:/Users/mizza/OneDrive/Desktop/CMD/2. LASI/1_LASI_W1_HH_roster 1.xlsx")
+final_data <- merge (merged_data, roster, by = "hhid", all = TRUE)
+```
+
+
+
+**DATA OF VULNERABLE GROUP - SENIOR CITIZENS**
+
+```{r}
+final_data <- final_data%>%
+  rename(Age = dm005)
+```
+
+```{r}
+
+##TO APPLY AGE FILTER##
+create_age_category <- function(Age) {
+  if (is.na(Age)) {
+    return(NA)
+  }
+  
+  if (Age >= 60 & Age <= 69) {
+    return("Young Old")
+  } else if (Age >= 70 & Age <= 79) {
+    return("Old")
+  } else if (Age >= 80) {
+    return("Very Old")
+  } else {
+    return(NA) 
+  }
+}
+final_data$AgeCategory <- sapply(final_data$Age, create_age_category)
+
+final_data <- final_data[final_data$AgeCategory %in% c("Young Old", "Old", "Very Old"), ]
+```
+
+**EDUCATION BUCKET**
+
+```{r}
+final_data <- final_data %>%
+  mutate(Education_level = case_when(
+    dm006 == "2 No" ~ "Uneducated",
+    dm008 %in% c("1 Less than Primary (Standard 1-4)", 
+                 "2 Primary Completed (Standard 5-7)", 
+                 "3 Middle Completed (Standard 8- 9)") ~ "Primary School",
+    dm008 == "4 Secondary School/Matriculation completed" ~ "Secondary School",
+    dm008 %in% c("5 Higher Secondary/Intermediate/Senior Secondary completed", 
+                 "6 Diploma and certificate holders") ~ "Senior Secondary School",
+    dm008 %in% c("7 Graduate degree (B.A., B.Sc., B. Com.) completed", 
+                 "8 Post-graduate degree or (M.A., M.Sc., M. Com.) above (M.Phil, Ph.D., Post-Doc) completed", 
+                 "9 Professional course/degree (B.Ed, BE, B.Tech, MBBS, BHMS, BAMS, B.Pharm, BCS, BCA, BBA, LLB, BVSc., B. Arch, M.Ed, ME, M.Tech, MD, M.Pharm, MCS, MCA, MBA,LLM, MVSc., M. Arch, MS, CA, CS, CWA)Completed") ~ "Tertiary Education",
+    TRUE ~ "Other"
+  ))
+```
+
+
+
+
+```{r}
+final_data <- final_data %>%
+  rename(Employed = we004)
+```
+
+```{r}
+final_data <- final_data%>%
+  rename(Employed_3_months = we001)
+```
+
+```{r}
+labour_force<- final_data%>%
+  filter(Employed == "1 Yes")
+```
+
+```{r}
+currently_not_working<- final_data%>%
+  filter(Employed == "2 No")
+```
+
+```{r}
+
+# Replace NA values in the Employed column with "Never worked"
+final_data$Employed[is.na(final_data$Employed)] <- "Never worked"
+```
+
+
+```{r}
+currently_not_working <- currently_not_working %>%
+  rename(Reason_current_not_working = we005)
+```
+
+```{r}
+labour_force<- labour_force %>%
+  rename(Occupation = we027)
+```
+
+
+
+```{r}
+library(networkD3)
+library(dplyr)
+
+# Filter and merge data
+working_data <- final_data %>%
+  filter(Employed == "1 Yes") %>%
+  mutate(Node = "Currently Working") %>%
+  left_join(labour_force, by = "...1.x") %>%  # replace 'common_identifier' with the actual column name
+  filter(!is.na(Occupation)) %>%
+  select(Node, Occupation)
+
+not_working_data <- final_data %>%
+  filter(Employed == "2 No") %>%
+  mutate(Node = "Currently Not Working") %>%
+  left_join(currently_not_working, by = "...1.x") %>%  # replace 'common_identifier' with the actual column name
+  filter(!is.na(Reason_current_not_working)) %>%
+  select(Node, Reason = Reason_current_not_working)
+
+# Create nodes data frame
+nodes <- data.frame(
+  name = c("Ever Worked", "Currently Working", "Currently Not Working", 
+           unique(working_data$Occupation), unique(not_working_data$Reason))
+)
+
+# Calculate the number of people currently working and not working
+num_currently_working <- nrow(working_data)
+num_currently_not_working <- nrow(not_working_data)
+
+# Create links data frame
+links <- data.frame(
+  SourceID = c(
+    rep(which(nodes$name == "Ever Worked") - 1, 2),  # "Ever Worked" to "Currently Working" and "Currently Not Working"
+    rep(which(nodes$name == "Currently Working") - 1, num_currently_working),
+    rep(which(nodes$name == "Currently Not Working") - 1, num_currently_not_working)
+  ),
+  TargetID = c(
+    which(nodes$name == "Currently Working") - 1,
+    which(nodes$name == "Currently Not Working") - 1,
+    match(working_data$Occupation, nodes$name) - 1,
+    match(not_working_data$Reason, nodes$name) - 1
+  ),
+  value = c(
+    num_currently_working,
+    num_currently_not_working,
+    rep(1, num_currently_working),
+    rep(1, num_currently_not_working)
+  )
+)
+
+sankeyNetwork(
+  Links = links, Nodes = nodes,
+  Source = "SourceID", Target = "TargetID",
+  Value = "value", NodeID = "name",
+  units = "TWh", fontSize = 12, nodeWidth = 30
+)
+```
+
+
+```{r}
+# Assuming you have already loaded your dataset `final_data`
+# Install and load the necessary packages if not already installed
+# install.packages("VennDiagram")
+library(VennDiagram)
+
+# Define your sets based on the columns in final_data
+set1 <- which(final_data$ht002 == "1 Yes")
+set2 <- which(final_data$ht003 == "1 Yes")
+set3 <- which(final_data$ht004 == "1 Yes")
+set4 <- which(final_data$ht005 == "1 Yes")
+
+# Create a list of your sets
+venn_list <- list(
+  ht002 = set1,
+  ht003 = set2,
+  ht004 = set3,
+  ht005 = set4
+)
+
+# Plot the Venn diagram
+venn.diagram(
+  venn_list,
+  category.names = c("ht002", "ht003", "ht004", "ht005"),
+  filename = "venn_diagram1.png",  # Specify a filename if you want to save the plot
+  output = FALSE  # Set to FALSE if you just want to display the plot in RStudio
+)
+
+
+
+```
+
+
+```{r}
+# Assuming you have already loaded your dataset `final_data`
+# Install and load the necessary packages if not already installed
+# install.packages("VennDiagram")
+library(VennDiagram)
+
+# Define your sets based on the columns in final_data
+set1 <- which(final_data$ht002 == "1 Yes")
+set2 <- which(final_data$ht003 == "1 Yes")
+set3 <- which(final_data$ht004 == "1 Yes")
+set4 <- which(final_data$ht005 == "1 Yes")
+
+# Apply weights based on stateindividualweight column
+set1_weighted <- set1[final_data$stateindividualweight[set1] > 0]
+set2_weighted <- set2[final_data$stateindividualweight[set2] > 0]
+set3_weighted <- set3[final_data$stateindividualweight[set3] > 0]
+set4_weighted <- set4[final_data$stateindividualweight[set4] > 0]
+
+# Create a list of your weighted sets
+venn_list <- list(
+  ht002 = set1_weighted,
+  ht003 = set2_weighted,
+  ht004 = set3_weighted,
+  ht005 = set4_weighted
+)
+
+# Plot the Venn diagram
+venn.diagram(
+  venn_list,
+  category.names = c("ht002", "ht003", "ht004", "ht005"),
+  filename = "venn_diagram_weighted.png",  # Specify a filename if you want to save the plot
+  output = FALSE  # Set to FALSE if you just want to display the plot in RStudio
+)
+```

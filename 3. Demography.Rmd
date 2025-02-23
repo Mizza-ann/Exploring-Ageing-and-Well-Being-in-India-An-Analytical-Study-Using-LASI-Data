@@ -1,0 +1,302 @@
+---
+title: "Demography - Kerala"
+author: "Mizza"
+date: "2024-06-13"
+output: html_document
+---
+
+```{r}
+#| label: setup
+#| warning: false
+#| echo: false
+
+library(ggplot2)
+library(readxl)
+library(dplyr)
+library(tidyverse)
+library(tidyr)
+library(survey)
+library(ggsankey)
+
+Household <- read_excel("C:/Users/mizza/OneDrive/Desktop/CMD/2. LASI/2_LASI_W1_Household_v4 1.xlsx")
+Individual <- read_excel("C:/Users/mizza/OneDrive/Desktop/CMD/2. LASI/3_LASI_W1_Individual_data 1.xlsx")
+merged_data <- merge (Individual, Household, by = "hhid", all = TRUE)
+roster <- read_excel ("C:/Users/mizza/OneDrive/Desktop/CMD/2. LASI/1_LASI_W1_HH_roster 1.xlsx")
+final_data <- merge (merged_data, roster, by = "hhid", all = TRUE)
+```
+
+
+**DATA OF VULNERABLE GROUP - SENIOR CITIZENS**
+
+```{r}
+final_data <- final_data%>%
+  rename(Age = dm005)
+```
+
+```{r}
+
+##TO APPLY AGE FILTER##
+create_age_category <- function(Age) {
+  if (is.na(Age)) {
+    return(NA)
+  }
+  
+  if (Age >= 60 & Age <= 69) {
+    return("Young Old")
+  } else if (Age >= 70 & Age <= 79) {
+    return("Old")
+  } else if (Age >= 80) {
+    return("Very Old")
+  } else {
+    return(NA) 
+  }
+}
+final_data$AgeCategory <- sapply(final_data$Age, create_age_category)
+
+final_data <- final_data[final_data$AgeCategory %in% c("Young Old", "Old", "Very Old"), ]
+```
+
+
+**EDUCATION BUCKET**
+
+```{r}
+final_data <- final_data %>%
+  mutate(Education_level = case_when(
+    dm006 == "2 No" ~ "Uneducated",
+    dm008 %in% c("1 Less than Primary (Standard 1-4)", 
+                 "2 Primary Completed (Standard 5-7)", 
+                 "3 Middle Completed (Standard 8- 9)") ~ "Primary School",
+    dm008 == "4 Secondary School/Matriculation completed" ~ "Secondary School",
+    dm008 %in% c("5 Higher Secondary/Intermediate/Senior Secondary completed", 
+                 "6 Diploma and certificate holders") ~ "Senior Secondary School",
+    dm008 %in% c("7 Graduate degree (B.A., B.Sc., B. Com.) completed", 
+                 "8 Post-graduate degree or (M.A., M.Sc., M. Com.) above (M.Phil, Ph.D., Post-Doc) completed", 
+                 "9 Professional course/degree (B.Ed, BE, B.Tech, MBBS, BHMS, BAMS, B.Pharm, BCS, BCA, BBA, LLB, BVSc., B. Arch, M.Ed, ME, M.Tech, MD, M.Pharm, MCS, MCA, MBA,LLM, MVSc., M. Arch, MS, CA, CS, CWA)Completed") ~ "Tertiary Education",
+    TRUE ~ "Other"
+  ))
+```
+
+
+
+**1. GENDER**
+
+```{r}
+final_data <- final_data %>%
+  rename(Gender = dm003)
+```
+
+```{r}
+count_Gender <- sum(!is.na(final_data$Gender))
+
+# Print the result
+print(count_Gender)
+
+# Create the frequency distribution table
+frequency <- table(final_data$Gender)
+print(frequency)
+
+# Proportion table
+proportion_table <- prop.table(frequency) * 100  
+print(round(proportion_table, digits=2))
+
+# Define the survey design
+design <- svydesign(id = ~1, weights = ~stateindividualweight, data = final_data)
+
+# Create a weighted frequency distribution table
+svytable_design <- svytable(~Gender, design = design)
+print(svytable_design)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table <- prop.table(svytable_design) * 100  
+print(round(weighted_proportion_table, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df <- as.data.frame(weighted_proportion_table)
+```
+
+
+**2. AGE**
+
+
+```{r}
+
+count_AgeCategory <- sum(!is.na(final_data$AgeCategory))
+
+# Print the result
+print(count_AgeCategory)
+
+# Create the frequency distribution table
+frequency2 <- table(final_data$AgeCategory)
+print(frequency2)
+
+# Proportion table
+proportion_table2 <- prop.table(frequency2) * 100  
+print(round(proportion_table2, digits=2))
+
+# Define the survey design
+design2 <- svydesign(id = ~1, weights = ~stateindividualweight, data = final_data)
+
+# Create a weighted frequency distribution table
+svytable_design2 <- svytable(~AgeCategory, design = design2)
+print(svytable_design2)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table2 <- prop.table(svytable_design2) * 100  
+print(round(weighted_proportion_table2, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df2 <- as.data.frame(weighted_proportion_table2)
+```
+
+
+**3. EDUCATION**
+
+
+```{r}
+# Create the frequency distribution table
+frequency3 <- table(final_data$Education_level)
+print(frequency3)
+
+# Proportion table
+proportion_table3 <- prop.table(frequency3) * 100  
+print(round(proportion_table3, digits=2))
+
+# Define the survey design
+design3 <- svydesign(id = ~1, weights = ~stateindividualweight, data = final_data)
+
+# Create a weighted frequency distribution table
+svytable_design3 <- svytable(~Education_level, design = design3)
+print(svytable_design3)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table3 <- prop.table(svytable_design3) * 100  
+print(round(weighted_proportion_table3, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df3 <- as.data.frame(weighted_proportion_table3)
+```
+
+
+**4. COMMUNITY**
+
+```{r}
+final_data <- final_data %>%
+  rename(Community = dm013)
+```
+
+```{r}
+# Replace None of the above values in the Community column with "General Category"
+final_data <- final_data %>%
+  mutate(Community = ifelse(Community == "4 None of them", "General Category", Community))
+
+# Create the frequency distribution table
+frequency4 <- table(final_data$Community)
+print(frequency4)
+
+# Proportion table
+proportion_table4 <- prop.table(frequency4) * 100  
+print(round(proportion_table4, digits=2))
+
+# Define the survey design
+design4 <- svydesign(id = ~1, weights = ~stateindividualweight, data = final_data)
+
+# Create a weighted frequency distribution table
+svytable_design4 <- svytable(~Community, design = design4)
+print(svytable_design4)
+
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table4 <- prop.table(svytable_design4) * 100  
+print(round(weighted_proportion_table4, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df4 <- as.data.frame(weighted_proportion_table4)
+```
+
+*Counting NA data*
+```{r}
+# Assuming final_data_No_temp is your dataset
+num_NA_job_search1 <- sum(is.na(final_data$Community))
+
+# Print the result
+print(num_NA_job_search1)
+```
+
+```{r}
+# Assuming final_data_No_temp is your dataset
+num_NA_job_search2 <- sum(is.na(final_data$dm012))
+
+# Print the result
+print(num_NA_job_search2)
+
+frequency6 <- table(final_data$dm012)
+print(frequency6)
+
+```
+
+**5. MARRIAGE**
+
+```{r}
+final_data <- final_data %>%
+  rename(Marital_status = dm021)
+```
+
+```{r}
+
+# Create the frequency distribution table
+frequency5 <- table(final_data$Marital_status)
+print(frequency5)
+
+# Proportion table
+proportion_table5 <- prop.table(frequency4) * 100  
+print(round(proportion_table5, digits=2))
+
+# Define the survey design
+design5 <- svydesign(id = ~1, weights = ~stateindividualweight, data = final_data)
+
+# Create a weighted frequency distribution table
+svytable_design5 <- svytable(~Marital_status, design = design5)
+print(svytable_design5)
+
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table5 <- prop.table(svytable_design5) * 100  
+print(round(weighted_proportion_table5, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df5 <- as.data.frame(weighted_proportion_table5)
+```
+
+
+**6. Income**
+
+```{r}
+final_data <- final_data %>%
+  rename(Income = mpce_quintile.x)
+```
+
+```{r}
+
+# Create the frequency distribution table
+frequency6 <- table(final_data$Income)
+print(frequency6)
+
+# Proportion table
+proportion_table6 <- prop.table(frequency6) * 100  
+print(round(proportion_table6, digits=2))
+
+# Define the survey design
+design6 <- svydesign(id = ~1, weights = ~stateindividualweight, data = final_data)
+
+# Create a weighted frequency distribution table
+svytable_design6 <- svytable(~Income, design = design6)
+print(svytable_design6)
+
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table6 <- prop.table(svytable_design6) * 100  
+print(round(weighted_proportion_table6, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df6 <- as.data.frame(weighted_proportion_table6)
+```  

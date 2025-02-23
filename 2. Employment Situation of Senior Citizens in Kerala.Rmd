@@ -1,0 +1,1942 @@
+---
+title: "Employment Situation of Senior Citizens in Kerala"
+author: "Mizza"
+date: "2024-06-10"
+output: html_document
+---
+
+
+```{r}
+#| label: setup
+#| warning: false
+#| echo: false
+
+library(ggplot2)
+library(readxl)
+library(dplyr)
+library(tidyverse)
+library(tidyr)
+library(survey)
+library(networkD3)
+
+Household <- read_excel("C:/Users/mizza/OneDrive/Desktop/CMD/2. LASI/2_LASI_W1_Household_v4 1.xlsx")
+Individual <- read_excel("C:/Users/mizza/OneDrive/Desktop/CMD/2. LASI/3_LASI_W1_Individual_data 1.xlsx")
+merged_data <- merge (Individual, Household, by = "hhid", all = TRUE)
+roster <- read_excel ("C:/Users/mizza/OneDrive/Desktop/CMD/2. LASI/1_LASI_W1_HH_roster 1.xlsx")
+final_data <- merge (merged_data, roster, by = "hhid", all = TRUE)
+```
+
+
+
+**DATA OF VULNERABLE GROUP - SENIOR CITIZENS**
+
+```{r}
+final_data <- final_data%>%
+  rename(Age = dm005)
+```
+
+```{r}
+
+##TO APPLY AGE FILTER##
+create_age_category <- function(Age) {
+  if (is.na(Age)) {
+    return(NA)
+  }
+  
+  if (Age >= 60 & Age <= 69) {
+    return("Young Old")
+  } else if (Age >= 70 & Age <= 79) {
+    return("Old")
+  } else if (Age >= 80) {
+    return("Very Old")
+  } else {
+    return(NA) 
+  }
+}
+final_data$AgeCategory <- sapply(final_data$Age, create_age_category)
+
+final_data <- final_data[final_data$AgeCategory %in% c("Young Old", "Old", "Very Old"), ]
+```
+
+**EDUCATION BUCKET**
+
+```{r}
+final_data <- final_data %>%
+  mutate(Education_level = case_when(
+    dm006 == "2 No" ~ "Uneducated",
+    dm008 %in% c("1 Less than Primary (Standard 1-4)", 
+                 "2 Primary Completed (Standard 5-7)", 
+                 "3 Middle Completed (Standard 8- 9)") ~ "Primary School",
+    dm008 == "4 Secondary School/Matriculation completed" ~ "Secondary School",
+    dm008 %in% c("5 Higher Secondary/Intermediate/Senior Secondary completed", 
+                 "6 Diploma and certificate holders") ~ "Senior Secondary School",
+    dm008 %in% c("7 Graduate degree (B.A., B.Sc., B. Com.) completed", 
+                 "8 Post-graduate degree or (M.A., M.Sc., M. Com.) above (M.Phil, Ph.D., Post-Doc) completed", 
+                 "9 Professional course/degree (B.Ed, BE, B.Tech, MBBS, BHMS, BAMS, B.Pharm, BCS, BCA, BBA, LLB, BVSc., B. Arch, M.Ed, ME, M.Tech, MD, M.Pharm, MCS, MCA, MBA,LLM, MVSc., M. Arch, MS, CA, CS, CWA)Completed") ~ "Tertiary Education",
+    TRUE ~ "Other"
+  ))
+```
+
+
+
+
+```{r}
+final_data <- final_data %>%
+  rename(Employed = we004)
+```
+
+```{r}
+final_data <- final_data%>%
+  rename(Employed_3_months = we001)
+```
+
+
+
+**I. Current employment status - Yes/No**
+
+```{r}
+# Create the frequency distribution table
+frequency <- table(final_data$Employed)
+print(frequency)
+
+# Proportion table
+proportion_table <- prop.table(frequency) * 100  
+print(round(proportion_table, digits=2))
+
+# Define the survey design
+design <- svydesign(id = ~1, weights = ~stateindividualweight, data = final_data)
+
+# Create a weighted frequency distribution table
+svytable_design <- svytable(~Employed, design = design)
+print(svytable_design)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table <- prop.table(svytable_design) * 100  
+print(round(weighted_proportion_table, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df <- as.data.frame(weighted_proportion_table)
+```
+
+
+*Counting NA data*
+```{r}
+# Assuming final_data_No_temp is your dataset
+num_NA_job_search1 <- sum(is.na(final_data$Employed))
+
+# Print the result
+print(num_NA_job_search1)
+```
+
+NA: 489
+
+*About the 489*
+```{r}
+# Create a new dataset with only rows where Employed is NA
+na_employed_data <- final_data %>% filter(is.na(Employed))
+
+frequency1 <- table(na_employed_data$Employed_3_months)
+print(frequency1)
+```
+
+*i.e.., this 489 has never been to the labour force*
+
+*Forming dataset with 489 people - never been to labour force*
+
+```{r}
+final_data_never_worked <- final_data%>%
+  filter(Employed_3_months == "2 No")
+```
+
+*Checking whether there is any person who never worked for atleast 3 months in their lifetime but is currently working or not working*
+
+```{r}
+check<- final_data%>%
+  filter(Employed == "1 Yes" & Employed_3_months == "2 No")
+```
+
+```{r}
+check1<- final_data%>%
+  filter(Employed == "2 No" & Employed_3_months == "2 No")
+```
+
+**I. PEOPLE WHO HAVE NEVER WORKED IN THEIR LIFETIME**
+
+```{r}
+# Create the frequency distribution table
+frequency2 <- table(final_data$Employed_3_months)
+print(frequency2)
+
+# Proportion table
+proportion_table2 <- prop.table(frequency2) * 100  
+print(round(proportion_table2, digits=2))
+
+# Define the survey design
+design2 <- svydesign(id = ~1, weights = ~stateindividualweight, data = final_data)
+
+# Create a weighted frequency distribution table
+svytable_design2 <- svytable(~Employed_3_months, design = design2)
+print(svytable_design2)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table2 <- prop.table(svytable_design2) * 100  
+print(round(weighted_proportion_table2, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df2 <- as.data.frame(weighted_proportion_table2)
+```
+
+
+
+
+
+
+**II. CURRENT WORKING - STATUS**
+
+*filtering NA from the column "Employed" in final_data to remove the people who have never worked in their lifetime*
+
+```{r}
+current_employment_status <- final_data[!is.na(final_data$Employed), ]
+```
+
+
+```{r}
+# Create the frequency distribution table
+frequency3 <- table(current_employment_status$Employed)
+print(frequency3)
+
+# Proportion table
+proportion_table3 <- prop.table(frequency3) * 100  
+print(round(proportion_table3, digits=2))
+
+# Define the survey design
+design3 <- svydesign(id = ~1, weights = ~stateindividualweight, data = current_employment_status)
+
+# Create a weighted frequency distribution table
+svytable_design3 <- svytable(~Employed, design = design3)
+print(svytable_design3)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table3 <- prop.table(svytable_design3) * 100  
+print(round(weighted_proportion_table3, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df3 <- as.data.frame(weighted_proportion_table3)
+```
+
+
+
+**III. 1. CURRENTLY NOT IN LABOUR FORCE** 
+
+*Ever Worked*
+```{r}
+# Create the frequency distribution table
+frequency4 <- table(final_data$Employed_3_months)
+print(frequency4)
+
+# Proportion table
+proportion_table4 <- prop.table(frequency4) * 100  
+print(round(proportion_table4, digits=2))
+
+# Define the survey design
+design4 <- svydesign(id = ~1, weights = ~stateindividualweight, data = final_data)
+
+# Create a weighted frequency distribution table
+svytable_design4 <- svytable(~Employed_3_months, design = design4)
+print(svytable_design4)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table4 <- prop.table(svytable_design4) * 100  
+print(round(weighted_proportion_table4, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df4 <- as.data.frame(weighted_proportion_table4)
+```
+
+
+*Worked in their lifetime - but not currently working*
+
+```{r}
+currently_not_working<- final_data%>%
+  filter(Employed == "2 No")
+```
+
+
+
+**III. 2. CURRENTLY IN LABOUR FORCE** 
+
+```{r}
+labour_force<- final_data%>%
+  filter(Employed == "1 Yes")
+```
+
+
+
+
+**=> ANALYSIS**
+
+
+**LABOUR FORCE PARTICIPATION RATE**
+
+
+*1. Labour force*
+
+```{r}
+unemployed_data <- currently_not_working%>%
+  filter(we005 == "2 Unemployed and looking for job")
+```
+
+*i.e.., Labour force*
+```{r}
+labour_force_final <- bind_rows(labour_force, unemployed_data)
+```
+
+**Labour force participation rate**
+
+```{r}
+svy_design <- svydesign(id = ~1, data = final_data, weights = ~stateindividualweight)
+
+# Total count of hhid 
+total_count_labour_force <- nrow(labour_force_final)
+
+# Total count of hhid 
+total_count_final_data <- nrow(final_data)
+
+# Labour force participation rate
+Labour_force_participation_rate<- (total_count_labour_force/total_count_final_data)*100
+
+#Print results
+cat("Total count of labour force:", total_count_labour_force, "\n")
+cat("Total count of working age population:", total_count_final_data, "\n")
+cat("Labour_force_participation_rate:", Labour_force_participation_rate, "\n")
+
+
+# Calculate the weighted sum of the labor force
+weighted_labor_force <- sum(labour_force_final$stateindividualweight, na.rm = TRUE)
+
+# Calculate the weighted sum of the working-age population
+weighted_working_age_population <- sum(final_data$stateindividualweight, na.rm = TRUE)
+
+# Calculate the weighted labor force participation rate (LFPR)
+weighted_lfpr <- (weighted_labor_force / weighted_working_age_population) * 100
+
+# Print the weighted LFPR
+print(paste("Weighted Labor Force Participation Rate:", round(weighted_lfpr, 2), "%"))
+
+```
+
+
+
+**1. Labour force participation rate - Gender wise**
+
+```{r}
+final_data <- final_data %>%
+  rename(Gender = dm003)
+```
+
+```{r}
+final_data_clean_male <- final_data %>%
+  filter(Gender == "1 Male")
+
+final_data_clean_female <- final_data %>%
+  filter(Gender == "2 Female")
+
+# Total count of hhid 
+total_final_data_clean_male <- nrow(final_data_clean_male)
+total_final_data_clean_female <- nrow(final_data_clean_female)
+
+#Print results
+cat("Total count of working age population_male:", total_final_data_clean_male, "\n")
+cat("Total count of working age population_female:", total_final_data_clean_female, "\n")
+
+# Count the number of non-NA observations in the gender column
+count_gender <- sum(!is.na(final_data$Gender))
+
+# Print the result
+print(count_gender)
+
+```
+
+
+```{r}
+labour_force_final <- labour_force_final %>%
+  rename(Gender = dm003)
+```
+
+```{r}
+labour_force_male <- labour_force_final %>%
+  filter(Gender == "1 Male")
+
+labour_force_female <- labour_force_final %>%
+  filter(Gender == "2 Female")
+
+# Total count of hhid 
+total_labour_force_clean_male <- nrow(labour_force_male)
+total_labour_force_clean_female <- nrow(labour_force_female)
+
+#Print results
+cat("Total count of labour_force_male:", total_labour_force_clean_male, "\n")
+cat("Total count of labour_force_female:", total_labour_force_clean_female, "\n")
+
+```
+
+
+```{r}
+# Calculate LFPR for Male
+LFPR_male <- (total_labour_force_clean_male / total_final_data_clean_male) * 100
+
+# Calculate LFPR for Female
+LFPR_female <- (total_labour_force_clean_female / total_final_data_clean_female) * 100
+
+# Print the results
+cat("LFPR for Male:", LFPR_male, "%\n")
+cat("LFPR for Female:", LFPR_female, "%\n")
+
+# Calculate the weighted sum of the labor force
+weighted_labor_force_male <- sum(labour_force_male$stateindividualweight, na.rm = TRUE)
+weighted_labor_force_female <- sum(labour_force_female$stateindividualweight, na.rm = TRUE)
+
+
+# Calculate the weighted sum of the working-age population
+weighted_working_age_male <- sum(final_data_clean_male$stateindividualweight, na.rm = TRUE)
+weighted_working_age_female <- sum(final_data_clean_female$stateindividualweight, na.rm = TRUE)
+
+# Calculate the weighted labor force participation rate (LFPR)
+weighted_lfpr_male <- (weighted_labor_force_male / weighted_working_age_male) * 100
+weighted_lfpr_female <- (weighted_labor_force_female / weighted_working_age_female) * 100
+
+# Print the weighted LFPR
+print(paste("Weighted Labor Force Participation Rate_male:", round(weighted_lfpr_male, 2), "%"))
+print(paste("Weighted Labor Force Participation Rate_female:", round(weighted_lfpr_female, 2), "%"))
+
+```
+
+
+**2. Labour force participation rate - Age wise**
+
+```{r}
+final_data_clean_young_old <- final_data %>%
+  filter(AgeCategory == "Young Old")
+
+final_data_clean_old <- final_data %>%
+  filter(AgeCategory == "Old")
+
+final_data_clean_very_old <- final_data %>%
+  filter(AgeCategory == "Very Old")
+
+# Total count of hhid 
+total_final_data_clean_young_old <- nrow(final_data_clean_young_old)
+total_final_data_clean_old <- nrow(final_data_clean_old)
+total_final_data_clean_very_old <- nrow(final_data_clean_very_old)
+
+#Print results
+cat("Total count of working age population_young_old:", total_final_data_clean_young_old, "\n")
+cat("Total count of working age population_old:", total_final_data_clean_old, "\n")
+cat("Total count of working age population_very_old:", total_final_data_clean_very_old, "\n")
+
+count1 <- sum(!is.na(final_data$AgeCategory))
+
+# Print the result
+print(count1)
+```
+
+
+```{r}
+labour_force_young_old <- labour_force_final %>%
+  filter(AgeCategory == "Young Old")
+
+labour_force_old <- labour_force_final %>%
+  filter(AgeCategory == "Old")
+
+labour_force_very_old <- labour_force_final %>%
+  filter(AgeCategory == "Very Old")
+
+# Total count of hhid 
+total_labour_force_young_old <- nrow(labour_force_young_old)
+total_labour_force_old <- nrow(labour_force_old)
+total_labour_force_very_old <- nrow(labour_force_very_old)
+
+#Print results
+cat("Total count of labour_force population_young_old:", total_labour_force_young_old, "\n")
+cat("Total count of labour_force population_old:", total_labour_force_old, "\n")
+cat("Total count of labour_force population_very_old:", total_labour_force_very_old, "\n")
+
+
+# Calculate the weighted sum of the labor force
+weighted_labor_force_young_old <- sum(labour_force_young_old$stateindividualweight, na.rm = TRUE)
+weighted_labor_force_old <- sum(labour_force_old$stateindividualweight, na.rm = TRUE)
+weighted_labor_force_very_old <- sum(labour_force_very_old$stateindividualweight, na.rm = TRUE)
+
+# Calculate the weighted sum of the working-age population
+weighted_working_age_young_old <- sum(final_data_clean_young_old$stateindividualweight, na.rm = TRUE)
+weighted_working_age_old <- sum(final_data_clean_old$stateindividualweight, na.rm = TRUE)
+weighted_working_age_very_old <- sum(final_data_clean_very_old$stateindividualweight, na.rm = TRUE)
+
+
+# Calculate the weighted labor force participation rate (LFPR)
+weighted_lfpr_young_old <- (weighted_labor_force_young_old / weighted_working_age_young_old) * 100
+weighted_lfpr_old <- (weighted_labor_force_old / weighted_working_age_old) * 100
+weighted_lfpr_very_old <- (weighted_labor_force_very_old / weighted_working_age_very_old) * 100
+
+# Print the weighted LFPR
+print(paste("Weighted Labor Force Participation Rate_young_old:", round(weighted_lfpr_young_old, 2), "%"))
+print(paste("Weighted Labor Force Participation Rate_old:", round(weighted_lfpr_old, 2), "%"))
+print(paste("Weighted Labor Force Participation Rate_very_old:", round(weighted_lfpr_very_old, 2), "%"))
+
+```
+
+
+
+
+**3. Labour force participation rate - Community wise**
+
+```{r}
+final_data <- final_data %>%
+  rename(Community = dm013)
+```
+
+```{r}
+final_data_clean_sc <- final_data %>%
+  filter(Community == "1 Scheduled caste")
+
+final_data_clean_st <- final_data %>%
+  filter(Community == "2 Scheduled tribe")
+
+final_data_clean_obc <- final_data %>%
+  filter(Community == "3 Other backward class (OBC)")
+
+final_data_clean_general <- final_data %>%
+  filter(Community == "4 None of them")
+
+# Total count of hhid 
+total_final_data_clean_sc <- nrow(final_data_clean_sc)
+total_final_data_clean_st <- nrow(final_data_clean_st)
+total_final_data_clean_obc <- nrow(final_data_clean_obc)
+total_final_data_clean_general <- nrow(final_data_clean_general)
+
+#Print results
+cat("Total count of working age population_sc:", total_final_data_clean_sc, "\n")
+cat("Total count of working age population_st:", total_final_data_clean_st, "\n")
+cat("Total count of working age population_obc:", total_final_data_clean_obc, "\n")
+cat("Total count of working age population_general:", total_final_data_clean_general, "\n")
+
+count1a <- sum(!is.na(final_data$Community))
+
+# Print the result
+print(count1a)
+```
+
+```{r}
+labour_force_final <- labour_force_final %>%
+  rename(Community = dm013)
+```
+
+```{r}
+labour_force_sc <- labour_force_final %>%
+  filter(Community == "1 Scheduled caste")
+
+labour_force_st <- labour_force_final %>%
+  filter(Community == "2 Scheduled tribe")
+
+labour_force_obc <- labour_force_final %>%
+  filter(Community == "3 Other backward class (OBC)")
+
+labour_force_general <- labour_force_final %>%
+  filter(Community == "4 None of them")
+
+# Total count of hhid 
+total_labour_force_sc <- nrow(labour_force_sc)
+total_labour_force_st <- nrow(labour_force_st)
+total_labour_force_obc <- nrow(labour_force_obc)
+total_labour_force_general <- nrow(labour_force_general)
+
+
+#Print results
+cat("Total count of labour_force_sc:", total_labour_force_sc, "\n")
+cat("Total count of labour_force_st:", total_labour_force_st, "\n")
+cat("Total count of labour_force_obc:", total_labour_force_obc, "\n")
+cat("Total count of labour_force_general:", total_labour_force_general, "\n")
+
+```
+
+
+```{r}
+LFPR_sc <- (total_labour_force_sc / total_final_data_clean_sc) * 100
+
+LFPR_st <- (total_labour_force_st / total_final_data_clean_st) * 100
+
+LFPR_obc <- (total_labour_force_obc / total_final_data_clean_obc) * 100
+
+LFPR_general <- (total_labour_force_general / total_final_data_clean_general) * 100
+
+# Print the results
+cat("LFPR for SC Category:", LFPR_sc, "%\n")
+cat("LFPR for ST Category:", LFPR_st, "%\n")
+cat("LFPR for OBC Category:", LFPR_obc, "%\n")
+cat("LFPR for General Category:", LFPR_general, "%\n")
+
+# Calculate the weighted sum of the labor force
+weighted_labor_force_sc <- sum(labour_force_sc$stateindividualweight, na.rm = TRUE)
+weighted_labor_force_st <- sum(labour_force_st$stateindividualweight, na.rm = TRUE)
+weighted_labor_force_obc <- sum(labour_force_obc$stateindividualweight, na.rm = TRUE)
+weighted_labor_force_general <- sum(labour_force_general$stateindividualweight, na.rm = TRUE)
+
+# Calculate the weighted sum of the working-age population
+weighted_working_age_sc <- sum(final_data_clean_sc$stateindividualweight, na.rm = TRUE)
+weighted_working_age_st <- sum(final_data_clean_st$stateindividualweight, na.rm = TRUE)
+weighted_working_age_obc <- sum(final_data_clean_obc$stateindividualweight, na.rm = TRUE)
+weighted_working_age_general <- sum(final_data_clean_general$stateindividualweight, na.rm = TRUE)
+
+
+# Calculate the weighted labor force participation rate (LFPR)
+weighted_lfpr_sc <- (weighted_labor_force_sc / weighted_working_age_sc) * 100
+weighted_lfpr_st <- (weighted_labor_force_st / weighted_working_age_st) * 100
+weighted_lfpr_obc <- (weighted_labor_force_obc / weighted_working_age_obc) * 100
+weighted_lfpr_general <- (weighted_labor_force_general / weighted_working_age_general) * 100
+
+# Print the weighted LFPR
+print(paste("Weighted Labor Force Participation Rate_sc:", round(weighted_lfpr_sc, 2), "%"))
+print(paste("Weighted Labor Force Participation Rate_st:", round(weighted_lfpr_st, 2), "%"))
+print(paste("Weighted Labor Force Participation Rate_obc:", round(weighted_lfpr_obc, 2), "%"))
+print(paste("Weighted Labor Force Participation Rate_general:", round(weighted_lfpr_general, 2), "%"))
+
+```
+
+
+
+**4. Labour force participation rate - Educational level**
+
+```{r}
+frequency35 <- table(final_data$dm006)
+print(frequency35)
+```
+
+```{r}
+frequency36 <- table(final_data$dm008)
+print(frequency36)
+```
+
+
+
+```{r}
+final_data_clean_uneducated <- final_data %>%
+  filter(Education_level == "Uneducated")
+
+final_data_clean_primary_school <- final_data %>%
+  filter(Education_level == "Primary School")
+
+final_data_clean_secondary_school <- final_data %>%
+  filter(Education_level == "Secondary School")
+
+final_data_clean_senior_secondary_school <- final_data %>%
+  filter(Education_level == "Senior Secondary School")
+
+final_data_clean_tertiary_education <- final_data %>%
+  filter(Education_level == "Tertiary Education")
+
+# Total count of hhid 
+total_final_data_clean_uneducated <- nrow(final_data_clean_uneducated)
+total_final_data_clean_primary_school <- nrow(final_data_clean_primary_school)
+total_final_data_clean_secondary_school <- nrow(final_data_clean_secondary_school)
+total_final_data_clean_senior_secondary_school <- nrow(final_data_clean_senior_secondary_school)
+total_final_data_clean_tertiary_education <- nrow(final_data_clean_tertiary_education)
+
+#Print results
+cat("Total count of working age population_uneducated:", total_final_data_clean_uneducated, "\n")
+cat("Total count of working age population_primary_school:", total_final_data_clean_primary_school, "\n")
+cat("Total count of working age population_secondary_school:", total_final_data_clean_secondary_school, "\n")
+cat("Total count of working age population_senior_secondary_school:", total_final_data_clean_senior_secondary_school, "\n")
+cat("Total count of working age population_tertiary_education:", total_final_data_clean_tertiary_education, "\n")
+
+count1b <- sum(!is.na(final_data$Education_level))
+
+# Print the result
+print(count1b)
+```
+
+```{r}
+frequency36 <- table(labour_force_final$dm006)
+print(frequency36)
+```
+
+
+```{r}
+frequency36 <- table(labour_force_final$dm008)
+print(frequency36)
+```
+
+```{r}
+labour_force_uneducated <- labour_force_final %>%
+  filter(Education_level == "Uneducated")
+
+labour_force_primary_school <- labour_force_final %>%
+  filter(Education_level == "Primary School")
+
+labour_force_secondary_school <- labour_force_final %>%
+  filter(Education_level == "Secondary School")
+
+labour_force_senior_secondary_school <- labour_force_final %>%
+  filter(Education_level == "Senior Secondary School")
+
+labour_force_tertiary_education <- labour_force_final %>%
+  filter(Education_level == "Tertiary Education")
+
+# Total count of hhid 
+total_labour_force_uneducated  <- nrow(labour_force_uneducated)
+total_labour_force_primary_school <- nrow(labour_force_primary_school)
+total_labour_force_secondary_school <- nrow(labour_force_secondary_school)
+total_labour_force_senior_secondary_school <- nrow(labour_force_senior_secondary_school)
+total_labour_force_tertiary_education <- nrow(labour_force_tertiary_education)
+
+
+#Print results
+cat("Total count of labour_force_uneducated:", total_labour_force_uneducated , "\n")
+cat("Total count of labour_force_primary_school:", total_labour_force_primary_school, "\n")
+cat("Total count of labour_force_secondary_school:", total_labour_force_secondary_school, "\n")
+cat("Total count of labour_force_senior_secondary_school:", total_labour_force_senior_secondary_school, "\n")
+cat("Total count of labour_force_tertiary_education:", total_labour_force_tertiary_education, "\n")
+
+```
+
+
+```{r}
+LFPR_uneducated <- (total_labour_force_uneducated / total_final_data_clean_uneducated) * 100
+
+LFPR_primary_school <- (total_labour_force_primary_school / total_final_data_clean_primary_school) * 100
+
+LFPR_secondary_school <- (total_labour_force_secondary_school / total_final_data_clean_secondary_school) * 100
+
+LFPR_senior_secondary_school <- (total_labour_force_senior_secondary_school / total_final_data_clean_senior_secondary_school) * 100
+
+LFPR_tertiary_education <- (total_labour_force_tertiary_education / total_final_data_clean_tertiary_education) * 100
+
+# Print the results
+cat("LFPR for uneducated:", LFPR_uneducated, "%\n")
+cat("LFPR for primary_school:", LFPR_primary_school, "%\n")
+cat("LFPR for secondary_school:", LFPR_secondary_school, "%\n")
+cat("LFPR for senior_secondary_school:", LFPR_senior_secondary_school, "%\n")
+cat("LFPR for tertiary_education:", LFPR_tertiary_education, "%\n")
+
+# Calculate the weighted sum of the labor force
+weighted_labor_force_uneducated <- sum(labour_force_uneducated$stateindividualweight, na.rm = TRUE)
+weighted_labor_force_primary_school <- sum(labour_force_primary_school$stateindividualweight, na.rm = TRUE)
+weighted_labor_force_secondary_school <- sum(labour_force_secondary_school$stateindividualweight, na.rm = TRUE)
+weighted_labor_force_senior_secondary_school <- sum(labour_force_senior_secondary_school$stateindividualweight, na.rm = TRUE)
+weighted_labor_force_tertiary_education <- sum(labour_force_tertiary_education$stateindividualweight, na.rm = TRUE)
+
+# Calculate the weighted sum of the working-age population
+weighted_working_age_uneducated <- sum(final_data_clean_uneducated$stateindividualweight, na.rm = TRUE)
+weighted_working_age_primary_school <- sum(final_data_clean_primary_school$stateindividualweight, na.rm = TRUE)
+weighted_working_age_secondary_school <- sum(final_data_clean_secondary_school$stateindividualweight, na.rm = TRUE)
+weighted_working_age_senior_secondary_school <- sum(final_data_clean_senior_secondary_school$stateindividualweight, na.rm = TRUE)
+weighted_working_age_tertiary_education <- sum(final_data_clean_tertiary_education$stateindividualweight, na.rm = TRUE)
+
+
+# Calculate the weighted labor force participation rate (LFPR)
+weighted_lfpr_uneducated <- (weighted_labor_force_uneducated / weighted_working_age_uneducated) * 100
+weighted_lfpr_primary_school <- (weighted_labor_force_primary_school / weighted_working_age_primary_school) * 100
+weighted_lfpr_secondary_school <- (weighted_labor_force_secondary_school / weighted_working_age_secondary_school) * 100
+weighted_lfpr_senior_secondary_school <- (weighted_labor_force_senior_secondary_school / weighted_working_age_senior_secondary_school) * 100
+weighted_lfpr_tertiary_education <- (weighted_labor_force_tertiary_education / weighted_working_age_tertiary_education) * 100
+
+# Print the weighted LFPR
+print(paste("Weighted Labor Force Participation Rate_uneducated:", round(weighted_lfpr_uneducated, 2), "%"))
+print(paste("Weighted Labor Force Participation Rate_primary_school:", round(weighted_lfpr_primary_school, 2), "%"))
+print(paste("Weighted Labor Force Participation Rate_secondary_school:", round(weighted_lfpr_secondary_school, 2), "%"))
+print(paste("Weighted Labor Force Participation Rate_senior_secondary_school:", round(weighted_lfpr_senior_secondary_school, 2), "%"))
+print(paste("Weighted Labor Force Participation Rate_tertiary_education:", round(weighted_lfpr_tertiary_education, 2), "%"))
+
+```
+
+
+
+**4. Labour force participation rate - Income wise**
+
+```{r}
+final_data <- final_data %>%
+  rename(Income = mpce_quintile.x)
+```
+
+```{r}
+final_data_clean_poorest <- final_data %>%
+  filter(Income == "1 Poorest")
+
+final_data_clean_poorer <- final_data %>%
+  filter(Income == "2 Poorer")
+
+final_data_clean_middle <- final_data %>%
+  filter(Income == "3 Middle")
+
+final_data_clean_richer <- final_data %>%
+  filter(Income == "4 Richer")
+
+final_data_clean_richest <- final_data %>%
+  filter(Income == "5 Richest")
+
+# Total count of hhid 
+total_final_data_clean_poorest <- nrow(final_data_clean_poorest)
+total_final_data_clean_poorer <- nrow(final_data_clean_poorer)
+total_final_data_clean_middle <- nrow(final_data_clean_middle)
+total_final_data_clean_richer <- nrow(final_data_clean_richer)
+total_final_data_clean_richest <- nrow(final_data_clean_richest)
+
+#Print results
+cat("Total count of working age population_poorest:", total_final_data_clean_poorest, "\n")
+cat("Total count of working age population_poorer:", total_final_data_clean_poorer, "\n")
+cat("Total count of working age population_middle:", total_final_data_clean_middle, "\n")
+cat("Total count of working age population_richer:", total_final_data_clean_richer, "\n")
+cat("Total count of working age population_richest:", total_final_data_clean_richest, "\n")
+
+count1c <- sum(!is.na(final_data$Income))
+
+# Print the result
+print(count1c)
+```
+
+```{r}
+labour_force_final <- labour_force_final %>%
+  rename(Income = mpce_quintile.x)
+```
+
+```{r}
+labour_force_poorest <- labour_force_final %>%
+  filter(Income == "1 Poorest")
+
+labour_force_poorer <- labour_force_final %>%
+  filter(Income == "2 Poorer")
+
+labour_force_middle <- labour_force_final %>%
+  filter(Income == "3 Middle")
+
+labour_force_richer <- labour_force_final %>%
+  filter(Income == "4 Richer")
+
+labour_force_richest <- labour_force_final %>%
+  filter(Income == "5 Richest")
+
+# Total count of hhid 
+total_labour_force_poorest <- nrow(labour_force_poorest)
+total_labour_force_poorer <- nrow(labour_force_poorer)
+total_labour_force_middle <- nrow(labour_force_middle)
+total_labour_force_richer <- nrow(labour_force_richer)
+total_labour_force_richest <- nrow(labour_force_richest)
+
+
+#Print results
+cat("Total count of labour_force_poorest:", total_labour_force_poorest, "\n")
+cat("Total count of labour_force_poorer:", total_labour_force_poorer, "\n")
+cat("Total count of labour_force_middle:", total_labour_force_middle, "\n")
+cat("Total count of labour_force_richer:", total_labour_force_richer, "\n")
+cat("Total count of labour_force_richest:", total_labour_force_richest, "\n")
+
+```
+
+
+```{r}
+LFPR_poorer <- (total_labour_force_poorer / total_final_data_clean_poorer) * 100
+
+LFPR_poorest <- (total_labour_force_poorest / total_final_data_clean_poorest) * 100
+
+LFPR_middle <- (total_labour_force_middle / total_final_data_clean_middle) * 100
+
+LFPR_richer <- (total_labour_force_richer / total_final_data_clean_richer) * 100
+
+LFPR_richest <- (total_labour_force_richest / total_final_data_clean_richest) * 100
+
+# Print the results
+cat("LFPR for Poorest Category:", LFPR_poorest, "%\n")
+cat("LFPR for Poorer Category:", LFPR_poorer, "%\n")
+cat("LFPR for Middle Category:", LFPR_middle, "%\n")
+cat("LFPR for Richer Category:", LFPR_richer, "%\n")
+cat("LFPR for Richest Category:", LFPR_richest, "%\n")
+
+# Calculate the weighted sum of the labor force
+weighted_labor_force_poorest <- sum(labour_force_poorest$stateindividualweight, na.rm = TRUE)
+weighted_labor_force_poorer <- sum(labour_force_poorer$stateindividualweight, na.rm = TRUE)
+weighted_labor_force_middle <- sum(labour_force_middle$stateindividualweight, na.rm = TRUE)
+weighted_labor_force_richer <- sum(labour_force_richer$stateindividualweight, na.rm = TRUE)
+weighted_labor_force_richest <- sum(labour_force_richest$stateindividualweight, na.rm = TRUE)
+
+# Calculate the weighted sum of the working-age population
+weighted_working_age_poorest <- sum(final_data_clean_poorest$stateindividualweight, na.rm = TRUE)
+weighted_working_age_poorer <- sum(final_data_clean_poorer$stateindividualweight, na.rm = TRUE)
+weighted_working_age_middle <- sum(final_data_clean_middle$stateindividualweight, na.rm = TRUE)
+weighted_working_age_richer <- sum(final_data_clean_richer$stateindividualweight, na.rm = TRUE)
+weighted_working_age_richest <- sum(final_data_clean_richest$stateindividualweight, na.rm = TRUE)
+
+
+# Calculate the weighted labor force participation rate (LFPR)
+weighted_lfpr_poorest <- (weighted_labor_force_poorest / weighted_working_age_poorest) * 100
+weighted_lfpr_poorer <- (weighted_labor_force_poorer / weighted_working_age_poorer) * 100
+weighted_lfpr_middle <- (weighted_labor_force_middle / weighted_working_age_middle) * 100
+weighted_lfpr_richer <- (weighted_labor_force_richer / weighted_working_age_richer) * 100
+weighted_lfpr_richest <- (weighted_labor_force_richest / weighted_working_age_richest) * 100
+
+# Print the weighted LFPR
+print(paste("Weighted Labor Force Participation Rate_poorest:", round(weighted_lfpr_poorest, 2), "%"))
+print(paste("Weighted Labor Force Participation Rate_poorer:", round(weighted_lfpr_poorer, 2), "%"))
+print(paste("Weighted Labor Force Participation Rate_middle:", round(weighted_lfpr_middle, 2), "%"))
+print(paste("Weighted Labor Force Participation Rate_richer:", round(weighted_lfpr_richer, 2), "%"))
+print(paste("Weighted Labor Force Participation Rate_richest:", round(weighted_lfpr_richest, 2), "%"))
+
+```
+
+**A. CURRENT EMPLOYMENT SCENARIO**
+
+
+```{r}
+
+# Replace NA values in the Employed column with "Never worked"
+final_data$Employed[is.na(final_data$Employed)] <- "Never worked"
+
+
+# Create the frequency distribution table
+frequency5 <- table(final_data$Employed)
+print(frequency5)
+
+# Proportion table
+proportion_table5 <- prop.table(frequency5) * 100  
+print(round(proportion_table5, digits=2))
+ 
+# Define the survey design
+design5 <- svydesign(id = ~1, weights = ~stateindividualweight, data = final_data)
+
+# Create a weighted frequency distribution table
+svytable_design5 <- svytable(~Employed, design = design5)
+print(svytable_design5)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table5 <- prop.table(svytable_design5) * 100  
+print(round(weighted_proportion_table5, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df5 <- as.data.frame(weighted_proportion_table5)
+
+count1d <- sum(!is.na(final_data$Employed))
+
+# Print the result
+print(count1d)
+```
+
+
+
+
+
+
+**I. NEVER WORKED ATLEAST 3 MONTHS IN THEIR LIFETIME**
+
+*A.Gender Analysis - never been to labour force*
+
+
+*(i) Male*
+
+```{r}
+final_data_never_worked<- final_data_never_worked%>%
+  rename(Gender = dm003)
+```
+
+```{r}
+never_worked_male<- final_data%>%
+  filter(Gender == "1 Male")
+```
+
+```{r}
+# Create the frequency distribution table
+frequency1 <- table(never_worked_male$Employed)
+print(frequency1)
+
+# Proportion table
+proportion_table1 <- prop.table(frequency1) * 100  
+print(round(proportion_table1, digits=2))
+
+# Define the survey design
+design1 <- svydesign(id = ~1, weights = ~stateindividualweight, data = never_worked_male)
+
+# Create a weighted frequency distribution table
+svytable_design1 <- svytable(~Employed, design = design1)
+print(svytable_design1)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table1 <- prop.table(svytable_design1) * 100  
+print(round(weighted_proportion_table1, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df1 <- as.data.frame(weighted_proportion_table1)
+
+```
+
+
+*(ii) Female*
+
+```{r}
+never_worked_female<- final_data%>%
+  filter(Gender == "2 Female")
+```
+
+```{r}
+# Create the frequency distribution table
+frequency14 <- table(never_worked_female$Employed)
+print(frequency14)
+
+# Proportion table
+proportion_table14 <- prop.table(frequency14) * 100  
+print(round(proportion_table14, digits=2))
+
+# Define the survey design
+design14 <- svydesign(id = ~1, weights = ~stateindividualweight, data = never_worked_female)
+
+# Create a weighted frequency distribution table
+svytable_design14 <- svytable(~Employed, design = design14)
+print(svytable_design14)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table14 <- prop.table(svytable_design14) * 100  
+print(round(weighted_proportion_table14, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df14 <- as.data.frame(weighted_proportion_table14)
+
+```
+
+
+
+**II.1. CURRENTLY NOT WORKING - Reason**
+
+```{r}
+currently_not_working <- currently_not_working %>%
+  rename(Reason_current_not_working = we005)
+```
+
+*Counting NA data*
+```{r}
+# Assuming final_data_No_temp is your dataset
+num_NA_job_search2 <- sum(is.na(currently_not_working$Reason_current_not_working))
+
+# Print the result
+print(num_NA_job_search2)
+```
+
+```{r}
+# Create the frequency distribution table
+frequency5 <- table(currently_not_working$Reason_current_not_working)
+print(frequency5)
+
+# Proportion table
+proportion_table5 <- prop.table(frequency5) * 100 
+print(round(proportion_table5, digits=2))
+
+# Define the survey design
+design5 <- svydesign(id = ~1, weights = ~stateindividualweight, data = currently_not_working)
+
+# Create a weighted frequency distribution table
+svytable_design5 <- svytable(~Reason_current_not_working, design = design5)
+print(svytable_design5)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table5 <- prop.table(svytable_design5) * 100  
+print(round(weighted_proportion_table5, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df5 <- as.data.frame(weighted_proportion_table5)
+
+
+count1e <- sum(!is.na(currently_not_working$Reason_current_not_working))
+
+# Print the result
+print(count1e)
+```
+
+```{r}
+weighted_proportion_df5<- weighted_proportion_df5%>%
+  rename(weighted_prop = Freq)
+```
+
+
+
+
+*II.1.a. CURRENTLY NOT WORKING - Other Reasons*
+
+```{r}
+other_reasons <- currently_not_working%>%
+  filter(Reason_current_not_working == "5 Other, Please specify WE005_other")
+```
+
+```{r}
+# Create the frequency distribution table
+frequency6 <- table(other_reasons$we005_other)
+print(frequency6)
+
+# Proportion table
+proportion_table6 <- prop.table(frequency6) * 100  
+print(round(proportion_table6, digits=2))
+
+# Define the survey design
+design6 <- svydesign(id = ~1, weights = ~stateindividualweight, data = other_reasons)
+
+# Create a weighted frequency distribution table
+svytable_design6 <- svytable(~we005_other, design = design6)
+print(svytable_design6)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table6 <- prop.table(svytable_design6) * 100  
+print(round(weighted_proportion_table6, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df6 <- as.data.frame(weighted_proportion_table6)
+
+count1ea <- sum(!is.na(other_reasons$we005_other))
+
+# Print the result
+print(count1ea)
+```
+
+
+
+**III. CURRENTLY WORKING** 
+
+**III.1. CURRENTLY WORKING - OCCUPATION** 
+
+```{r}
+labour_force<- labour_force %>%
+  rename(Occupation = we027)
+```
+
+```{r}
+labour_force$Occupation <- ifelse(labour_force$Occupation == "9", "9 Elementary occupations", labour_force$Occupation)
+labour_force$Occupation <- ifelse(labour_force$Occupation == "4", "4 Clerks", labour_force$Occupation)
+labour_force$Occupation <- ifelse(labour_force$Occupation == "5", "5 Service workers and shop and market sales workers", labour_force$Occupation)
+labour_force$Occupation <- ifelse(labour_force$Occupation == "6", "6 Skilled agricultural and fishery workers", labour_force$Occupation)
+labour_force$Occupation <- ifelse(labour_force$Occupation == "7", "7 Craft and related trade workers", labour_force$Occupation)
+labour_force$Occupation <- ifelse(labour_force$Occupation == "8", "8 Plant and machine operators and assemblers", labour_force$Occupation)
+labour_force$Occupation <- ifelse(labour_force$Occupation == "10", "10 Workers not classified anywhere", labour_force$Occupation)
+labour_force$Occupation <- ifelse(labour_force$Occupation == "11", "11 Other", labour_force$Occupation)
+```
+
+```{r}
+# Create the frequency distribution table
+frequency7 <- table(labour_force$Occupation)
+print(frequency7)
+
+# Define the survey design
+design7 <- svydesign(id = ~1, weights = ~stateindividualweight, data = labour_force)
+
+# Create a weighted frequency distribution table
+svytable_design7 <- svytable(~Occupation, design = design7)
+print(svytable_design7)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table7 <- prop.table(svytable_design7) * 100  
+print(round(weighted_proportion_table7, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df7 <- as.data.frame(weighted_proportion_table7)
+
+count1f <- sum(!is.na(labour_force$Occupation))
+
+# Print the result
+print(count1f)
+```
+
+```{r}
+weighted_proportion_df7<- weighted_proportion_df7%>%
+  rename(weighted_prop = Freq)
+```
+
+
+
+**_______________SANKEY DIAGRAM_________________**
+
+```{r}
+# Rename the specific observation
+currently_not_working$Reason_current_not_working <- ifelse(currently_not_working$Reason_current_not_working == "5 Other, Please specify WE005_other", "Other Reasons", currently_not_working$Reason_current_not_working )
+currently_not_working$Reason_current_not_working <- ifelse(currently_not_working$Reason_current_not_working == "1 Temporarily laid off, on sick or other leave, or in job training", "Temporarily laid off, on sick or other leave, or in job training", currently_not_working$Reason_current_not_working)
+currently_not_working$Reason_current_not_working <- ifelse(currently_not_working$Reason_current_not_working == "2 Unemployed and looking for job", "Unemployed and looking for job", currently_not_working$Reason_current_not_working)
+currently_not_working$Reason_current_not_working <- ifelse(currently_not_working$Reason_current_not_working == "3 Disabled", "Person with Disability", currently_not_working$Reason_current_not_working)
+currently_not_working$Reason_current_not_working <- ifelse(currently_not_working$Reason_current_not_working == "4 Homemaker", "Homemaker", currently_not_working$Reason_current_not_working)
+```
+
+
+```{r}
+labour_force$Occupation <- ifelse(labour_force$Occupation == "9 Elementary occupations", "Elementary occupations", labour_force$Occupation)
+labour_force$Occupation <- ifelse(labour_force$Occupation == "4 Clerks", "Clerks", labour_force$Occupation)
+labour_force$Occupation <- ifelse(labour_force$Occupation == "Service workers and shop and market sales workers", "Service workers and shop and market sales workers", labour_force$Occupation)
+labour_force$Occupation <- ifelse(labour_force$Occupation == "6 Skilled agricultural and fishery workers", "Skilled agricultural and fishery workers", labour_force$Occupation)
+labour_force$Occupation <- ifelse(labour_force$Occupation == "7 Craft and related trade workers", "Craft and related trade workers", labour_force$Occupation)
+labour_force$Occupation <- ifelse(labour_force$Occupation == "8 Plant and machine operators and assemblers", "Plant and machine operators and assemblers", labour_force$Occupation)
+labour_force$Occupation <- ifelse(labour_force$Occupation == "10 Workers not classified anywhere", "Workers not classified anywhere", labour_force$Occupation)
+labour_force$Occupation <- ifelse(labour_force$Occupation == "11 Other", "Other", labour_force$Occupation)
+labour_force$Occupation <- ifelse(labour_force$Occupation == "1 Legislators and senior officials", "Legislators and senior officials", labour_force$Occupation)
+labour_force$Occupation <- ifelse(labour_force$Occupation == "2 Corporate managers", "Corporate managers", labour_force$Occupation)
+labour_force$Occupation <- ifelse(labour_force$Occupation == "3 General managers", "General managers", labour_force$Occupation)
+labour_force$Occupation <- ifelse(labour_force$Occupation == "5 Service workers and shop and market sales workers", "Service workers and shop and market sales workers", labour_force$Occupation)
+```
+
+
+                                 
+```{r}
+# Filter and merge data
+working_data <- final_data %>%
+  filter(Employed == "1 Yes") %>%
+  mutate(Node = "Currently Working") %>%
+  left_join(labour_force, by = "...1.x") %>%  # replace 'common_identifier' with the actual column name
+  filter(!is.na(Occupation)) %>%
+  select(Node, Occupation)
+
+not_working_data <- final_data %>%
+  filter(Employed == "2 No") %>%
+  mutate(Node = "Currently Not Working") %>%
+  left_join(currently_not_working, by = "...1.x") %>%  # replace 'common_identifier' with the actual column name
+  filter(!is.na(Reason_current_not_working)) %>%
+  select(Node, Reason = Reason_current_not_working)
+
+# Create nodes data frame
+nodes <- data.frame(
+  name = c("Ever Worked", "Currently Working", "Currently Not Working", 
+           unique(working_data$Occupation), unique(not_working_data$Reason))
+)
+
+# Calculate the number of people currently working and not working
+num_currently_working <- nrow(working_data)
+num_currently_not_working <- nrow(not_working_data)
+
+# Create links data frame
+links <- data.frame(
+  SourceID = c(
+    rep(which(nodes$name == "Ever Worked") - 1, 2),  # "Ever Worked" to "Currently Working" and "Currently Not Working"
+    rep(which(nodes$name == "Currently Working") - 1, num_currently_working),
+    rep(which(nodes$name == "Currently Not Working") - 1, num_currently_not_working)
+  ),
+  TargetID = c(
+    which(nodes$name == "Currently Working") - 1,
+    which(nodes$name == "Currently Not Working") - 1,
+    match(working_data$Occupation, nodes$name) - 1,
+    match(not_working_data$Reason, nodes$name) - 1
+  ),
+  value = c(
+    num_currently_working,
+    num_currently_not_working,
+    rep(1, num_currently_working),
+    rep(1, num_currently_not_working)
+  )
+)
+
+sankeyNetwork(
+  Links = links, Nodes = nodes,
+  Source = "SourceID", Target = "TargetID",
+  Value = "value", NodeID = "name",
+  units = "TWh", fontSize = 12, nodeWidth = 30
+)
+```
+
+```{r}
+
+# Filter and merge data for working individuals
+working_data <- final_data %>%
+  filter(Employed == "1 Yes") %>%
+  mutate(Node = "Currently Working", Weight = stateindividualweight) %>%
+  left_join(labour_force, by = "...1.x") %>%  # replace 'common_identifier' with the actual column name
+  filter(!is.na(Occupation)) %>%
+  select(Node, Occupation, Weight)
+
+# Filter and merge data for not working individuals
+not_working_data <- final_data %>%
+  filter(Employed == "2 No") %>%
+  mutate(Node = "Currently Not Working", Weight = stateindividualweight) %>%
+  left_join(currently_not_working, by = "...1.x") %>%  # replace 'common_identifier' with the actual column name
+  filter(!is.na(Reason_current_not_working)) %>%
+  select(Node, Reason = Reason_current_not_working, Weight)
+
+# Filter data for other reasons
+other_reasons_data <- other_reasons %>%
+  filter(!is.na(we005_other)) %>%
+  select(Reason = we005_other, Weight = stateindividualweight)
+
+# Create nodes data frame
+nodes <- data.frame(
+  name = c("Ever Worked", "Currently Working", "Currently Not Working", 
+           unique(working_data$Occupation), unique(not_working_data$Reason), unique(other_reasons_data$Reason))
+)
+
+# Calculate the weighted values for people currently working and not working
+weighted_working <- sum(working_data$Weight)
+weighted_not_working <- sum(not_working_data$Weight)
+
+# Create links data frame
+links <- data.frame(
+  SourceID = c(
+    rep(which(nodes$name == "Ever Worked") - 1, 2),  # "Ever Worked" to "Currently Working" and "Currently Not Working"
+    rep(which(nodes$name == "Currently Working") - 1, nrow(working_data)),
+    rep(which(nodes$name == "Currently Not Working") - 1, nrow(not_working_data)),
+    rep(which(nodes$name == "Other Reasons") - 1, nrow(other_reasons_data))
+  ),
+  TargetID = c(
+    which(nodes$name == "Currently Working") - 1,
+    which(nodes$name == "Currently Not Working") - 1,
+    match(working_data$Occupation, nodes$name) - 1,
+    match(not_working_data$Reason, nodes$name) - 1,
+    match(other_reasons_data$Reason, nodes$name) - 1
+  ),
+  value = c(
+    weighted_working,
+    weighted_not_working,
+    working_data$Weight,
+    not_working_data$Weight,
+    other_reasons_data$Weight
+  )
+)
+sankeyNetwork(
+  Links = links, Nodes = nodes,
+  Source = "SourceID", Target = "TargetID",
+  Value = "value", NodeID = "name",
+  units = "TWh", fontSize = 12, nodeWidth = 30,
+  LinkGroup = c(rep(0, 4), 1),  # Adjust link groups to control link lengths
+  margin = list(t = 50)  # Adjust top margin for better visualization
+)
+
+
+```
+
+
+```{r}
+
+# Calculate weighted frequencies for "Currently Working" and "Currently Not Working"
+weighted_working <- sum(final_data$stateindividualweight[final_data$Employed == "1 Yes"])
+weighted_not_working <- sum(final_data$stateindividualweight[final_data$Employed == "2 No"])
+
+# Filter and merge data for working individuals
+working_data <- final_data %>%
+  filter(Employed == "1 Yes") %>%
+  mutate(Node = "Currently Working", Weight = stateindividualweight) %>%
+  left_join(labour_force, by = "...1.x") %>%  # replace 'common_identifier' with the actual column name
+  filter(!is.na(Occupation)) %>%
+  select(Node, Occupation, Weight)
+
+# Filter and merge data for not working individuals
+not_working_data <- final_data %>%
+  filter(Employed == "2 No") %>%
+  mutate(Node = "Currently Not Working", Weight = stateindividualweight) %>%
+  left_join(currently_not_working, by = "...1.x") %>%  # replace 'common_identifier' with the actual column name
+  filter(!is.na(Reason_current_not_working)) %>%
+  select(Node, Reason = Reason_current_not_working, Weight)
+
+# Filter data for other reasons
+other_reasons_data <- other_reasons %>%
+  filter(!is.na(we005_other)) %>%
+  select(Reason = we005_other, Weight = stateindividualweight)
+
+# Create nodes data frame
+nodes <- data.frame(
+  name = c("Ever Worked", "Currently Working", "Currently Not Working", 
+           unique(working_data$Occupation), unique(not_working_data$Reason), unique(other_reasons_data$Reason))
+)
+
+# Create links data frame
+links <- data.frame(
+  SourceID = c(
+    rep(which(nodes$name == "Ever Worked") - 1, 2),  # "Ever Worked" to "Currently Working" and "Currently Not Working"
+    rep(which(nodes$name == "Currently Working") - 1, nrow(working_data)),
+    rep(which(nodes$name == "Currently Not Working") - 1, nrow(not_working_data)),
+    rep(which(nodes$name == "Other Reasons") - 1, nrow(other_reasons_data))
+  ),
+  TargetID = c(
+    which(nodes$name == "Currently Working") - 1,
+    which(nodes$name == "Currently Not Working") - 1,
+    match(working_data$Occupation, nodes$name) - 1,
+    match(not_working_data$Reason, nodes$name) - 1,
+    match(other_reasons_data$Reason, nodes$name) - 1
+  ),
+  value = c(
+    weighted_working,
+    weighted_not_working,
+    working_data$Weight,
+    not_working_data$Weight,
+    other_reasons_data$Weight
+  )
+)
+
+sankeyNetwork(
+  Links = links, Nodes = nodes,
+  Source = "SourceID", Target = "TargetID",
+  Value = "value", NodeID = "name",
+  units = "TWh", fontSize = 12, nodeWidth = 30
+)
+
+```
+
+
+
+*Other reasons not included*
+```{r}
+# Filter and merge data
+working_data <- final_data %>%
+  filter(Employed == "1 Yes") %>%
+  mutate(Node = "Currently Working", Weight = stateindividualweight) %>%
+  left_join(labour_force, by = "...1.x") %>%  # replace 'common_identifier' with the actual column name
+  filter(!is.na(Occupation)) %>%
+  select(Node, Occupation, Weight)
+
+not_working_data <- final_data %>%
+  filter(Employed == "2 No") %>%
+  mutate(Node = "Currently Not Working", Weight = stateindividualweight) %>%
+  left_join(currently_not_working, by = "...1.x") %>%  # replace 'common_identifier' with the actual column name
+  filter(!is.na(Reason_current_not_working)) %>%
+  select(Node, Reason = Reason_current_not_working, Weight)
+
+# Create nodes data frame
+nodes <- data.frame(
+  name = c("Ever Worked", "Currently Working", "Currently Not Working", 
+           unique(working_data$Occupation), unique(not_working_data$Reason))
+)
+
+# Calculate the weighted values for people currently working and not working
+weighted_working <- sum(working_data$Weight)
+weighted_not_working <- sum(not_working_data$Weight)
+
+# Create links data frame
+links <- data.frame(
+  SourceID = c(
+    rep(which(nodes$name == "Ever Worked") - 1, 2),  # "Ever Worked" to "Currently Working" and "Currently Not Working"
+    rep(which(nodes$name == "Currently Working") - 1, nrow(working_data)),
+    rep(which(nodes$name == "Currently Not Working") - 1, nrow(not_working_data))
+  ),
+  TargetID = c(
+    which(nodes$name == "Currently Working") - 1,
+    which(nodes$name == "Currently Not Working") - 1,
+    match(working_data$Occupation, nodes$name) - 1,
+    match(not_working_data$Reason, nodes$name) - 1
+  ),
+  value = c(
+    weighted_working,
+    weighted_not_working,
+    working_data$Weight,
+    not_working_data$Weight
+  )
+)
+
+sankeyNetwork(
+  Links = links, Nodes = nodes,
+  Source = "SourceID", Target = "TargetID",
+  Value = "value", NodeID = "name",
+  units = "TWh", fontSize = 12, nodeWidth = 30
+)
+
+```
+
+
+**WORK - paid/unpaid**
+
+*Do you receive any wages or salary - no*
+
+```{r}
+no_wages <- labour_force%>%
+  filter(we014 == "2 No")
+```
+
+```{r}
+# Create the frequency distribution table
+frequency7a <- table(no_wages$Occupation)
+print(frequency7a)
+
+# Define the survey design
+design7a <- svydesign(id = ~1, weights = ~stateindividualweight, data = no_wages)
+
+# Create a weighted frequency distribution table
+svytable_design7a <- svytable(~Occupation, design = design7a)
+print(svytable_design7a)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table7a <- prop.table(svytable_design7a) * 100  
+print(round(weighted_proportion_table7a, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df7a <- as.data.frame(weighted_proportion_table7a)
+
+count1g <- sum(!is.na(no_wages$Occupation))
+
+# Print the result
+print(count1g)
+```
+
+
+
+*Do you receive any wages or salary - yes*
+
+```{r}
+yes_wages <- labour_force%>%
+  filter(we014 == "1 Yes")
+```
+
+```{r}
+# Create the frequency distribution table
+frequency7b <- table(yes_wages$Occupation)
+print(frequency7b)
+
+# Define the survey design
+design7b <- svydesign(id = ~1, weights = ~stateindividualweight, data = yes_wages)
+
+# Create a weighted frequency distribution table
+svytable_design7b <- svytable(~Occupation, design = design7b)
+print(svytable_design7b)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table7b <- prop.table(svytable_design7b) * 100  
+print(round(weighted_proportion_table7b, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df7b <- as.data.frame(weighted_proportion_table7b)
+```
+
+
+
+**B. FINANCIAL SECURITY**
+
+
+*Combining currently working and not working*
+
+```{r}
+current_scenario<- bind_rows(labour_force, currently_not_working)
+```
+
+
+
+**I. Financial Security - Pension**
+
+*Counting NA data*
+```{r}
+# Assuming final_data_No_temp is your dataset
+num_NA_job_search3 <- sum(is.na(current_scenario$we412))
+
+# Print the result
+print(num_NA_job_search3)
+
+count1 <- sum(!is.na(current_scenario$we412))
+
+# Print the result
+print(count1)
+```
+
+
+```{r}
+current_scenario <- current_scenario %>%
+  mutate(we412 = ifelse(is.na(we412), "NA", we412),
+         we412 = ifelse(we412 %in% c("1 Currently receiving", "2 Expected to receive in future"), 
+                        "Currently receiving or expected to receive", we412))
+
+
+# Create the frequency distribution table
+frequency8 <- table(current_scenario$we412)
+print(frequency8)
+
+# Proportion table
+proportion_table8 <- prop.table(frequency8) * 100 
+print(round(proportion_table8, digits=2))
+
+# Define the survey design
+design8 <- svydesign(id = ~1, weights = ~stateindividualweight, data = current_scenario)
+
+# Create a weighted frequency distribution table
+svytable_design8 <- svytable(~we412, design = design8)
+print(svytable_design8)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table8 <- prop.table(svytable_design8) * 100  
+print(round(weighted_proportion_table8, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df8 <- as.data.frame(weighted_proportion_table8)
+
+```
+
+```{r}
+weighted_proportion_df8 <- weighted_proportion_df8 %>%
+  rename(weighted_prop = Freq)
+```
+
+
+
+
+
+**II. Financial Security - Social Insurance**
+
+*1. Social Insurance - Yes*
+
+```{r}
+Social_security_insurance_yes <- current_scenario %>%
+  filter(we316a == "1 Yes"| we316b == "1 Yes"| we316c == "1 Yes"| we316d == "1 Yes"| we316e == "1 Yes"| we316f == "1 Yes"| we316g == "1 Yes"| we316h == "1 Yes"| we316i == "1 Yes")
+```
+
+
+*2. Social Insurance - No*
+
+```{r}
+Social_security_insurance_no <- current_scenario%>%
+  filter(we316a == "2 No" & we316b == "2 No"& we316c == "2 No" & we316d == "2 No" & we316e == "2 No" & we316f == "2 No" & we316g == "2 No" & we316h == "2 No"& we316i == "2 No")
+```
+
+
+*2. Social Insurance - NA in all*
+```{r}
+# List of columns to check for NA values
+columns_to_check <- c("we316a", "we316b", "we316c", "we316d", "we316e", "we316f", "we316g", "we316h", "we316i")
+
+# Check if all specified columns are NA for each row
+all_na_rows <- apply(current_scenario[columns_to_check], 1, function(row) all(is.na(row)))
+
+# Count the number of rows where all specified columns are NA
+num_all_na_rows <- sum(all_na_rows)
+
+# Print the result
+print(num_all_na_rows)
+```
+
+```{r}
+
+# Calculate the frequency of "1 Yes" in any of the specified columns
+yes_freq <- current_scenario %>%
+  filter(we316a == "1 Yes" | we316b == "1 Yes" | we316c == "1 Yes" | we316d == "1 Yes" | we316e == "1 Yes" | we316f == "1 Yes" | we316g == "1 Yes" | we316h == "1 Yes" | we316i == "1 Yes") %>%
+  summarise(freq_yes = n())
+
+# Calculate the frequency of "2 No" in all of the specified columns
+no_freq <- current_scenario %>%
+  filter(we316a == "2 No" & we316b == "2 No" & we316c == "2 No" & we316d == "2 No" & we316e == "2 No" & we316f == "2 No" & we316g == "2 No" & we316h == "2 No" & we316i == "2 No") %>%
+  summarise(freq_no = n())
+
+# Print the results
+cat("Frequency of '1 Yes':", yes_freq$freq_yes, "\n")
+cat("Frequency of '2 No':", no_freq$freq_no, "\n")
+
+# Calculate the frequency of "1 Yes" in any of the specified columns
+yes_frequency <- current_scenario %>%
+  filter(we316a == "1 Yes" | we316b == "1 Yes" | we316c == "1 Yes" | we316d == "1 Yes" | we316e == "1 Yes" | we316f == "1 Yes" | we316g == "1 Yes" | we316h == "1 Yes" | we316i == "1 Yes") %>%
+  summarise(freq_yes = sum(stateindividualweight))
+
+# Calculate the frequency of "2 No" in all of the specified columns
+no_frequency <- current_scenario %>%
+  filter(we316a == "2 No" & we316b == "2 No" & we316c == "2 No" & we316d == "2 No" & we316e == "2 No" & we316f == "2 No" & we316g == "2 No" & we316h == "2 No" & we316i == "2 No") %>%
+  summarise(freq_no = sum(stateindividualweight))
+
+# Combine the frequencies and calculate the proportions
+total_responses <- sum(current_scenario$stateindividualweight)
+yes_proportion <- (yes_frequency$freq_yes / total_responses)*100
+no_proportion <- (no_frequency$freq_no / total_responses)*100
+
+# Create a data frame with the results
+results <- data.frame(
+  Response = c("1 Yes", "2 No"),
+  Weighted_Proportion = c(yes_proportion, no_proportion)
+)
+
+# Print the results
+print(results)
+
+```
+
+
+
+**III. Financial Security - Wages/Salary**
+
+*Counting NA data*
+```{r}
+# Assuming final_data_No_temp is your dataset
+num_NA_job_search4 <- sum(is.na(labour_force$we014))
+
+# Print the result
+print(num_NA_job_search4)
+```
+
+
+```{r}
+# Create the frequency distribution table
+frequency9 <- table(labour_force$we014)
+print(frequency9)
+
+# Proportion table
+proportion_table9 <- prop.table(frequency9) * 100 
+print(round(proportion_table9, digits=2))
+
+# Define the survey design
+design9 <- svydesign(id = ~1, weights = ~stateindividualweight, data = labour_force)
+
+# Create a weighted frequency distribution table
+svytable_design9 <- svytable(~we014, design = design9)
+print(svytable_design9)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table9 <- prop.table(svytable_design9) * 100  
+print(round(weighted_proportion_table9, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df9 <- as.data.frame(weighted_proportion_table9)
+```
+
+
+
+
+
+**IV. Financial Security - Help from Family members**
+
+*Counting NA data*
+```{r}
+# Assuming final_data_No_temp is your dataset
+num_NA_job_search5 <- sum(is.na(current_scenario$fs401))
+
+# Print the result
+print(num_NA_job_search5)
+```
+
+
+```{r}
+# Create the frequency distribution table
+frequency10 <- table(current_scenario$fs401)
+print(frequency10)
+
+# Proportion table
+proportion_table10 <- prop.table(frequency10) * 100 
+print(round(proportion_table10, digits=2))
+
+# Define the survey design
+design10 <- svydesign(id = ~1, weights = ~stateindividualweight, data = current_scenario)
+
+# Create a weighted frequency distribution table
+svytable_design10 <- svytable(~fs401, design = design10)
+print(svytable_design10)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table10 <- prop.table(svytable_design10) * 100  
+print(round(weighted_proportion_table10, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df10 <- as.data.frame(weighted_proportion_table10)
+
+```
+
+
+
+
+
+
+**II. FINANCIAL STABILITY - Yes**
+
+```{r}
+financial_stability_yes1<- current_scenario%>%
+  filter(we412 == "Currently receiving or expected to receive" |we316a == "1 Yes"| we316b == "1 Yes"| we316c == "1 Yes"| we316d == "1 Yes"| we316e == "1 Yes"| we316f == "1 Yes"| we316g == "1 Yes"| we316h == "1 Yes"| we316i == "1 Yes"| fs401 == "1 Yes")
+```
+
+```{r}
+financial_stability_yes2<- labour_force%>%
+  filter(we014 == "1 Yes" )
+```
+
+```{r}
+financial_stability_yes<- bind_rows(financial_stability_yes2, financial_stability_yes1)
+```
+
+
+**II. FINANCIAL STABILITY - No**
+
+```{r}
+financial_stability_no1<- current_scenario%>%
+  filter( we412 == "3 Neither currently receiving nor expected to receive in future" & we316a == "2 No" & we316b == "2 No"& we316c == "2 No" & we316d == "2 No" & we316e == "2 No" & we316f == "2 No" & we316g == "2 No" & we316h == "2 No"& we316i == "2 No"  & fs401 == "2 No") 
+```
+
+```{r}
+financial_stability_no2<- labour_force%>%
+  filter(we014 == "2 No" )
+```
+
+```{r}
+financial_stability_no<- bind_rows(financial_stability_no2, financial_stability_no1)
+```
+
+
+**FINANCIAL STABILITY**
+
+```{r}
+
+# Rename "Currently receiving or expected to receive" to "2 No" in the column we412
+current_scenario <- current_scenario %>%
+  mutate(we412 = ifelse(we412 == "Currently receiving or expected to receive", "1 Yes", we412))
+
+current_scenario <- current_scenario %>%
+  mutate(we412 = ifelse(we412 == "3 Neither currently receiving nor expected to receive in future", "2 No", we412))
+
+# Calculate the frequency of "1 Yes" in any of the specified columns
+yes_freq1 <- current_scenario %>%
+  filter(we412 == "1 Yes" |we316a == "1 Yes"| we316b == "1 Yes"| we316c == "1 Yes"| we316d == "1 Yes"| we316e == "1 Yes"| we316f == "1 Yes"| we316g == "1 Yes"| we316h == "1 Yes"| we316i == "1 Yes"| fs401 == "1 Yes") %>%
+  summarise(freq_yes1 = n())
+
+# Frequency of "1 Yes" in the we014 column in the labour_force dataset
+yes_freq2 <- labour_force %>%
+  filter(we014 == "1 Yes") %>%
+  summarise(freq_yes2 = n())
+
+freq_yes <- yes_freq1$freq_yes1 + yes_freq2$freq_yes2
+
+
+
+# Calculate the frequency of "2 No" in all of the specified columns
+no_freq1 <- current_scenario %>%
+  filter(we412 == "2 No" & we316a == "2 No" & we316b == "2 No"& we316c == "2 No" & we316d == "2 No" & we316e == "2 No" & we316f == "2 No" & we316g == "2 No" & we316h == "2 No"& we316i == "2 No"  &  fs401 == "2 No") %>%
+  summarise(freq_no1 = n())
+
+# Frequency of "1 Yes" in the we014 column in the labour_force dataset
+no_freq2 <- labour_force %>%
+  filter(we014 == "2 No") %>%
+  summarise(freq_no2 = n())
+
+freq_no <- no_freq1$freq_no1 + no_freq2$freq_no2
+
+
+# Print the results
+cat("Frequency '1 Yes':", freq_yes, "\n")
+cat("Frequency '2 No':", freq_no, "\n")
+
+
+
+
+# Calculate the frequency of "1 Yes" in any of the specified columns
+# Calculate the frequency of "1 Yes" in the current_scenario dataset
+yes_frequency1 <- current_scenario %>%
+  filter(we412 == "1 Yes" | we316a == "1 Yes" | we316b == "1 Yes" | we316c == "1 Yes" | 
+         we316d == "1 Yes" | we316e == "1 Yes" | we316f == "1 Yes" | we316g == "1 Yes" | 
+         we316h == "1 Yes" | we316i == "1 Yes" | fs401 == "1 Yes") %>%
+  summarise(freq_yes_current = sum(stateindividualweight, na.rm = TRUE))
+
+# Calculate the frequency of "1 Yes" in the labour_force dataset
+yes_frequency2 <- labour_force %>%
+  filter(we014 == "1 Yes") %>%
+  summarise(freq_yes_labour = sum(stateindividualweight, na.rm = TRUE))
+
+# Combine the frequencies
+combined_freq_yes <- yes_frequency1$freq_yes_current + yes_frequency2$freq_yes_labour
+
+
+# Calculate the frequency of "2 No" in all of the specified columns
+no_frequency1 <- current_scenario %>%
+  filter(we412 == "2 No" & we316a == "2 No" & we316b == "2 No"& we316c == "2 No" & we316d == "2 No" & we316e == "2 No" & we316f == "2 No" & we316g == "2 No" & we316h == "2 No"& we316i == "2 No"  & fs401 == "2 No", na.rm = TRUE) %>%
+  summarise(freq_no_current = sum(stateindividualweight))
+
+# Calculate the frequency of "1 Yes" in the labour_force dataset
+no_frequency2 <- labour_force %>%
+  filter(we014 == "2 No") %>%
+  summarise(freq_no_labour = sum(stateindividualweight, na.rm = TRUE))
+
+# Combine the frequencies
+combined_freq_no <- no_frequency1$freq_no_current + no_frequency2$freq_no_labour
+
+
+# Combine the frequencies and calculate the proportions
+total_responses1 <- sum(current_scenario$stateindividualweight)
+yes_proportion1 <- (combined_freq_yes / total_responses1)*100
+no_proportion1 <- (combined_freq_no / total_responses1)*100
+
+# Create a data frame with the results
+results1 <- data.frame(
+  Response = c("1 Yes", "2 No", "NA"),
+  Weighted_Proportion = c(yes_proportion1, no_proportion1, 100 - (yes_proportion1 + no_proportion1))
+)
+
+# Print the results
+print(results1)
+
+```
+
+
+
+**II. 1. FINANCIAL STABILITY - No - Current employment scenario**
+
+
+```{r}
+# Create the frequency distribution table
+frequency11 <- table(financial_stability_no$Employed)
+print(frequency11)
+
+# Proportion table
+proportion_table11 <- prop.table(frequency10) * 100 
+print(round(proportion_table11, digits=2))
+
+# Define the survey design
+design11 <- svydesign(id = ~1, weights = ~stateindividualweight, data = financial_stability_no)
+
+# Create a weighted frequency distribution table
+svytable_design11 <- svytable(~Employed, design = design11)
+print(svytable_design11)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table11 <- prop.table(svytable_design11) * 100  
+print(round(weighted_proportion_table11, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df11 <- as.data.frame(weighted_proportion_table11)
+
+```
+
+
+**II. 2. FINANCIAL STABILITY - No - Current employment scenario**
+
+```{r}
+# Create the frequency distribution table
+frequency11 <- table(financial_stability_no$Reason_current_not_working)
+print(frequency11)
+
+# Proportion table
+proportion_table11 <- prop.table(frequency10) * 100 
+print(round(proportion_table11, digits=2))
+
+# Define the survey design
+design11 <- svydesign(id = ~1, weights = ~stateindividualweight, data = financial_stability_no)
+
+# Create a weighted frequency distribution table
+svytable_design11 <- svytable(~Reason_current_not_working, design = design11)
+print(svytable_design11)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table11 <- prop.table(svytable_design11) * 100  
+print(round(weighted_proportion_table11, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df11 <- as.data.frame(weighted_proportion_table11)
+
+```
+
+
+
+**II. 2. FINANCIAL STABILITY - No - Current employment scenario**
+
+
+```{r}
+financial_stability_no_working <- financial_stability_no%>%
+  filter(Employed == "1 Yes") 
+```
+
+```{r}
+# Create the frequency distribution table
+frequency12 <- table(financial_stability_no_working$Occupation) 
+print(frequency12)
+
+# Proportion table
+proportion_table12 <- prop.table(frequency12) * 100 
+print(round(proportion_table12, digits=2))
+
+# Define the survey design
+design12 <- svydesign(id = ~1, weights = ~stateindividualweight, data = financial_stability_no_working)
+
+# Create a weighted frequency distribution table
+svytable_design12 <- svytable(~Occupation, design = design12)
+print(svytable_design12)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table12 <- prop.table(svytable_design12) * 100  
+print(round(weighted_proportion_table12, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df12 <- as.data.frame(weighted_proportion_table12)
+
+```
+
+
+
+
+
+
+

@@ -1,0 +1,3265 @@
+---
+title: "Untitled"
+author: "Mizza"
+date: "2024-06-26"
+output: html_document
+---
+
+```{r}
+#| label: setup
+#| warning: false
+#| echo: false
+
+library(ggplot2)
+library(readxl)
+library(dplyr)
+library(tidyverse)
+library(tidyr)
+library(survey)
+library(vcd)  
+library(ggsankey)
+
+Household <- read_excel("C:/Users/mizza/OneDrive/Desktop/CMD/2. LASI/2_LASI_W1_Household_v4 1.xlsx")
+Individual <- read_excel("C:/Users/mizza/OneDrive/Desktop/CMD/2. LASI/3_LASI_W1_Individual_data 1.xlsx")
+merged_data <- merge (Individual, Household, by = "hhid", all = TRUE)
+roster <- read_excel ("C:/Users/mizza/OneDrive/Desktop/CMD/2. LASI/1_LASI_W1_HH_roster 1.xlsx")
+final_data <- merge (merged_data, roster, by = "hhid", all = TRUE)
+```
+
+
+**DATA OF VULNERABLE GROUP - SENIOR CITIZENS**
+
+```{r}
+final_data <- final_data%>%
+  rename(Age = dm005)
+```
+
+```{r}
+
+##TO APPLY AGE FILTER##
+create_age_category <- function(Age) {
+  if (is.na(Age)) {
+    return(NA)
+  }
+  
+  if (Age >= 60 & Age <= 69) {
+    return("Young Old")
+  } else if (Age >= 70 & Age <= 79) {
+    return("Old")
+  } else if (Age >= 80) {
+    return("Very Old")
+  } else {
+    return(NA) 
+  }
+}
+final_data$AgeCategory <- sapply(final_data$Age, create_age_category)
+
+final_data <- final_data[final_data$AgeCategory %in% c("Young Old", "Old", "Very Old"), ]
+```
+
+**EDUCATION BUCKET**
+
+```{r}
+final_data <- final_data %>%
+  mutate(Education_level = case_when(
+    dm006 == "2 No" ~ "Uneducated",
+    dm008 %in% c("1 Less than Primary (Standard 1-4)", 
+                 "2 Primary Completed (Standard 5-7)", 
+                 "3 Middle Completed (Standard 8- 9)") ~ "Primary School",
+    dm008 == "4 Secondary School/Matriculation completed" ~ "Secondary School",
+    dm008 %in% c("5 Higher Secondary/Intermediate/Senior Secondary completed", 
+                 "6 Diploma and certificate holders") ~ "Senior Secondary School",
+    dm008 %in% c("7 Graduate degree (B.A., B.Sc., B. Com.) completed", 
+                 "8 Post-graduate degree or (M.A., M.Sc., M. Com.) above (M.Phil, Ph.D., Post-Doc) completed", 
+                 "9 Professional course/degree (B.Ed, BE, B.Tech, MBBS, BHMS, BAMS, B.Pharm, BCS, BCA, BBA, LLB, BVSc., B. Arch, M.Ed, ME, M.Tech, MD, M.Pharm, MCS, MCA, MBA,LLM, MVSc., M. Arch, MS, CA, CS, CWA)Completed") ~ "Tertiary Education",
+    TRUE ~ "Other"
+  ))
+```
+
+```{r}
+final_data <- final_data %>%
+  mutate(cv001_new = case_when(
+    cv001 == 1 ~ "living_alone",
+    cv001 >= 2 ~ "living_with_family",
+    TRUE ~ as.character(cv001) # Keep the original value if none of the conditions are met
+    ))
+```
+
+
+
+**_____INTENTION TO CHANGE_____**
+
+```{r}
+final_data <- final_data %>%
+  rename(Intention_change = fs331)
+```
+
+
+*Merging all Yes*
+```{r}
+# Create a copy of the dataset to avoid modifying the original data
+final_data$change <- final_data$Intention_change
+
+# Define the values to be replaced with "Yes"
+values_to_replace <- c(
+  "2 Yes, prefer to live alone",
+  "3 Yes, prefer to live with spouse only",
+  "4 Yes, prefer to live with other child",
+  "5 Yes, prefer to live with other relatives",
+  "6 Yes, prefer to live with my own family (spouse and children) only",
+  "7 Yes, prefer to move into old age home"
+)
+
+# Replace the specified values with "Yes" in the "change" column
+final_data$change[final_data$Intention_change %in% values_to_replace] <- "Yes"
+```
+
+**CHI-SQUARE**
+```{r}
+# Data preprocessing
+final_data1 <- final_data %>%
+  mutate(
+    change = as.factor(change),
+    dm013 = as.factor(dm013),
+    dm003 = as.factor(dm003),
+    AgeCategory = as.factor(AgeCategory),
+    Education_level = as.factor(Education_level),
+    mpce_quintile.x = as.factor(mpce_quintile.x),
+    cv001_new = as.factor(cv001_new),
+    dm021 = as.factor(dm021)
+  ) %>%
+  drop_na(change, dm013, dm003, AgeCategory, Education_level, mpce_quintile.x, cv001_new, dm021)
+
+# Create a survey design object
+design <- svydesign(ids = ~1, data = final_data1, weights = ~stateindividualweight)
+
+# Function to perform chi-squared test and calculate Cramér's V
+perform_chi_squared_test_and_cramers_v <- function(variable, design) {
+  table <- svytable(as.formula(paste("~ change +", variable)), design)
+  
+  # Add small constant to avoid zero counts
+  table <- table + 1e-6
+  
+  if (length(unique(design$variables[[variable]])) > 1) {
+    chi_squared <- svychisq(as.formula(paste("~ change +", variable)), design)
+    
+    # Calculate Cramér's V
+    cramers_v <- sqrt(chi_squared$statistic / (sum(table) * (min(dim(table)) - 1)))
+    
+    return(list(chi_squared = chi_squared, cramers_v = cramers_v))
+  } else {
+    return("Not enough levels to perform chi-squared test")
+  }
+}
+
+# Perform chi-squared tests and calculate Cramér's V for each specified column separately
+results_dm013 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm013", design), error = function(e) e)
+results_dm003 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm003", design), error = function(e) e)
+results_AgeCategory <- tryCatch(perform_chi_squared_test_and_cramers_v("AgeCategory", design), error = function(e) e)
+results_Education_level <- tryCatch(perform_chi_squared_test_and_cramers_v("Education_level", design), error = function(e) e)
+results_mpce_quintile <- tryCatch(perform_chi_squared_test_and_cramers_v("mpce_quintile.x", design), error = function(e) e)
+results_cv001_new <- tryCatch(perform_chi_squared_test_and_cramers_v("cv001_new", design), error = function(e) e)
+results_dm021 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm021", design), error = function(e) e)
+
+# Print results
+results_dm013
+results_dm003
+results_AgeCategory
+results_Education_level
+results_mpce_quintile
+results_cv001_new
+results_dm021
+
+# Function to create and analyze a contingency table based on highest count
+create_and_analyze_contingency_table <- function(variable, design) {
+  # Create the contingency table
+  table <- svytable(as.formula(paste("~ change +", variable)), design)
+  
+  # Print the table
+  print(paste("Contingency table for:", variable))
+  print(table)
+  
+  # Find the maximum count
+  max_count <- which(table == max(table), arr.ind = TRUE)
+  
+  # Print the strongest association based on count
+  strongest_association <- list(
+    row = rownames(table)[max_count[1]],
+    column = colnames(table)[max_count[2]],
+    count = max(table)
+  )
+  
+  print(paste("Strongest association for", variable, "is between",
+              strongest_association$row, "and", strongest_association$column,
+              "with count", strongest_association$count))
+  
+  return(list(table = table, strongest_association = strongest_association))
+}
+
+# Analyze each specified column
+result_cv001_new <- create_and_analyze_contingency_table("cv001_new", design)
+
+# Print results
+result_cv001_new
+```
+
+
+```{r}
+# Data preprocessing (if not already done)
+final_data1a <- final_data %>%
+  mutate(
+    change = as.factor(change),
+    cv001_new = as.factor(cv001_new)
+  ) %>%
+  drop_na(change, cv001_new)
+
+# Create survey design object
+design <- svydesign(ids = ~1, data = final_data1a, weights = ~stateindividualweight)
+
+# Function to calculate Cramér's V for weighted data
+weighted_cramers_v <- function(var1, var2, design) {
+  # Create a formula for svytable
+  formula <- as.formula(paste("~", var1, "+", var2))
+  
+  # Create a weighted contingency table
+  tab <- svytable(formula, design)
+  
+  # Calculate chi-squared statistic manually
+  chi2 <- chisq.test(tab, correct = FALSE)$statistic
+  
+  # Extract the number of observations
+  n <- sum(weights(design))
+  
+  # Determine the number of levels in the smallest variable
+  k <- min(nlevels(final_data1a[[var1]]), nlevels(final_data1a[[var2]]))
+  
+  # Calculate Cramér's V
+  cramers_v <- sqrt(chi2 / (n * (k - 1)))
+  
+  return(cramers_v)
+}
+
+# Calculate Cramér's V for each pair of variables
+cramers_v7 <- weighted_cramers_v("change", "cv001_new", design)
+
+print(paste("Cramér's V7:", cramers_v7))
+```
+
+
+**I. Satisfaction**
+
+```{r}
+final_data<- final_data%>%
+  rename(Satisfaction= fs329)
+```
+
+**CHI-SQUARE**
+```{r}
+# Data preprocessing
+final_data2 <- final_data %>%
+  mutate(
+    Satisfaction = as.factor(Satisfaction),
+    dm013 = as.factor(dm013),
+    dm003 = as.factor(dm003),
+    AgeCategory = as.factor(AgeCategory),
+    Education_level = as.factor(Education_level),
+    mpce_quintile.x = as.factor(mpce_quintile.x),
+    cv001_new = as.factor(cv001_new),
+    dm021_new = as.factor(dm021)
+  ) %>%
+  drop_na(Satisfaction, dm013, dm003, AgeCategory, Education_level, mpce_quintile.x, cv001_new, dm021_new)
+
+# Create a survey design object
+design <- svydesign(ids = ~1, data = final_data2, weights = ~stateindividualweight)
+
+# Function to perform chi-squared test and calculate Cramér's V
+perform_chi_squared_test_and_cramers_v <- function(variable, design) {
+  table <- svytable(as.formula(paste("~ Satisfaction +", variable)), design)
+  
+  # Add small constant to avoid zero counts
+  table <- table + 1e-6
+  
+  if (length(unique(design$variables[[variable]])) > 1) {
+    chi_squared <- svychisq(as.formula(paste("~ Satisfaction +", variable)), design)
+    
+    # Calculate Cramér's V
+    cramers_v <- sqrt(chi_squared$statistic / (sum(table) * (min(dim(table)) - 1)))
+    
+    return(list(chi_squared = chi_squared, cramers_v = cramers_v))
+  } else {
+    return("Not enough levels to perform chi-squared test")
+  }
+}
+
+# Perform chi-squared tests and calculate Cramér's V for each specified column separately
+results_dm013 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm013", design), error = function(e) e)
+results_dm003 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm003", design), error = function(e) e)
+results_AgeCategory <- tryCatch(perform_chi_squared_test_and_cramers_v("AgeCategory", design), error = function(e) e)
+results_Education_level <- tryCatch(perform_chi_squared_test_and_cramers_v("Education_level", design), error = function(e) e)
+results_mpce_quintile <- tryCatch(perform_chi_squared_test_and_cramers_v("mpce_quintile.x", design), error = function(e) e)
+results_cv001_new <- tryCatch(perform_chi_squared_test_and_cramers_v("cv001_new", design), error = function(e) e)
+results_dm021 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm021", design), error = function(e) e)
+
+# Print results
+results_dm013
+results_dm003
+results_AgeCategory
+results_Education_level
+results_mpce_quintile
+results_cv001_new
+results_dm021
+
+# Function to create and analyze a contingency table based on highest count
+create_and_analyze_contingency_table <- function(variable, design) {
+  # Create the contingency table
+  table <- svytable(as.formula(paste("~ Satisfaction +", variable)), design)
+  
+  # Print the table
+  print(paste("Contingency table for:", variable))
+  print(table)
+  
+  # Find the maximum count
+  max_count <- which(table == max(table), arr.ind = TRUE)
+  
+  # Print the strongest association based on count
+  strongest_association <- list(
+    row = rownames(table)[max_count[1]],
+    column = colnames(table)[max_count[2]],
+    count = max(table)
+  )
+  
+  print(paste("Strongest association for", variable, "is between",
+              strongest_association$row, "and", strongest_association$column,
+              "with count", strongest_association$count))
+  
+  return(list(table = table, strongest_association = strongest_association))
+}
+
+# Analyze each specified column
+
+result_Community <- create_and_analyze_contingency_table("dm013", design)
+
+# Print results
+result_Community
+
+# Function to create and analyze a contingency table based on highest count
+create_and_analyze_contingency_table <- function(variable, design) {
+  # Create the contingency table
+  table <- svytable(as.formula(paste("~ Satisfaction +", variable)), design)
+  
+  # Print the table
+  print(paste("Contingency table for:", variable))
+  print(table)
+  
+  # Find the maximum count
+  max_count <- which(table == max(table), arr.ind = TRUE)
+  
+  # Print the strongest association based on count
+  strongest_association <- list(
+    row = rownames(table)[max_count[1]],
+    column = colnames(table)[max_count[2]],
+    count = max(table)
+  )
+  
+  print(paste("Strongest association for", variable, "is between",
+              strongest_association$row, "and", strongest_association$column,
+              "with count", strongest_association$count))
+  
+  return(list(table = table, strongest_association = strongest_association))
+}
+
+# Analyze each specified column
+
+result_Education_level <- create_and_analyze_contingency_table("Education_level", design)
+
+# Print results
+result_Education_level
+
+
+# Function to create and analyze a contingency table based on highest count
+create_and_analyze_contingency_table <- function(variable, design) {
+  # Create the contingency table
+  table <- svytable(as.formula(paste("~ Satisfaction +", variable)), design)
+  
+  # Print the table
+  print(paste("Contingency table for:", variable))
+  print(table)
+  
+  # Find the maximum count
+  max_count <- which(table == max(table), arr.ind = TRUE)
+  
+  # Print the strongest association based on count
+  strongest_association <- list(
+    row = rownames(table)[max_count[1]],
+    column = colnames(table)[max_count[2]],
+    count = max(table)
+  )
+  
+  print(paste("Strongest association for", variable, "is between",
+              strongest_association$row, "and", strongest_association$column,
+              "with count", strongest_association$count))
+  
+  return(list(table = table, strongest_association = strongest_association))
+}
+
+# Analyze each specified column
+result_cv001_new1 <- create_and_analyze_contingency_table("cv001_new", design)
+
+# Print results
+result_cv001_new1
+```
+
+
+**Cramer's V**
+```{r}
+# Data preprocessing (if not already done)
+final_data2a <- final_data %>%
+  mutate(
+    Satisfaction = as.factor(Satisfaction),
+        dm013 = as.factor(dm013),
+    Education_level = as.factor(Education_level),
+    cv001_new = as.factor(cv001_new)
+  ) %>%
+  drop_na(Satisfaction, Education_level, cv001_new)
+
+# Create survey design object
+design <- svydesign(ids = ~1, data = final_data2a, weights = ~stateindividualweight)
+
+# Function to calculate Cramér's V for weighted data
+weighted_cramers_v <- function(var1, var2, design) {
+  # Create a formula for svytable
+  formula <- as.formula(paste("~", var1, "+", var2))
+  
+  # Create a weighted contingency table
+  tab <- svytable(formula, design)
+  
+  # Calculate chi-squared statistic manually
+  chi2 <- chisq.test(tab, correct = FALSE)$statistic
+  
+  # Extract the number of observations
+  n <- sum(weights(design))
+  
+  # Determine the number of levels in the smallest variable
+  k <- min(nlevels(final_data2a[[var1]]), nlevels(final_data2a[[var2]]))
+  
+  # Calculate Cramér's V
+  cramers_v <- sqrt(chi2 / (n * (k - 1)))
+  
+  return(cramers_v)
+}
+
+# Calculate Cramér's V for each pair of variables
+cramers_v8a <- weighted_cramers_v("Satisfaction", "dm013", design)
+cramers_v8 <- weighted_cramers_v("Satisfaction", "Education_level", design)
+cramers_v9 <- weighted_cramers_v("Satisfaction", "cv001_new", design)
+
+print(paste("Cramér's V8a:", cramers_v8a))
+print(paste("Cramér's V8:", cramers_v8))
+print(paste("Cramér's V9:", cramers_v9))
+```
+
+
+
+**II. Decision making**
+
+```{r}
+final_data<- final_data%>%
+  rename(Decision = fs330)
+```
+
+```{r}
+# Create a copy of the dataset to avoid modifying the original data
+final_data$Decision <- final_data$Decision
+
+# Define the values to be replaced with "family"
+values_to_replace <- c(
+  "10 Daughter-in-law",
+  "12 Grand parents",
+  "13 Parent-in-law",
+  "14 Other relatives",
+  "2 Father",
+  "3 Mother",
+  "4 Brother/s",
+  "5 Sister/s",
+  "6 Spouse / partner",
+  "7 Son/s",
+  "8 Daughter/s",
+  "9 Son-in-law"
+)
+
+# Replace the specified values with "Yes" in the "change" column
+final_data$Decision[final_data$Decision %in% values_to_replace] <- "family"
+```
+
+**CHI-SQUARE**
+```{r}
+# Data preprocessing
+final_data3 <- final_data %>%
+  mutate(
+    Decision = as.factor(Decision),
+    dm013 = as.factor(dm013),
+    dm003 = as.factor(dm003),
+    AgeCategory = as.factor(AgeCategory),
+    Education_level = as.factor(Education_level),
+    mpce_quintile.x = as.factor(mpce_quintile.x),
+    cv001_new = as.factor(cv001_new),
+    dm021_new = as.factor(dm021)
+  ) %>%
+  drop_na(Decision, dm013, dm003, AgeCategory, Education_level, mpce_quintile.x, cv001_new, dm021_new)
+
+# Create a survey design object
+design <- svydesign(ids = ~1, data = final_data3, weights = ~stateindividualweight)
+
+# Function to perform chi-squared test and calculate Cramér's V
+perform_chi_squared_test_and_cramers_v <- function(variable, design) {
+  table <- svytable(as.formula(paste("~ Decision +", variable)), design)
+  
+  # Add small constant to avoid zero counts
+  table <- table + 1e-6
+  
+  if (length(unique(design$variables[[variable]])) > 1) {
+    chi_squared <- svychisq(as.formula(paste("~ Decision +", variable)), design)
+    
+    # Calculate Cramér's V
+    cramers_v <- sqrt(chi_squared$statistic / (sum(table) * (min(dim(table)) - 1)))
+    
+    return(list(chi_squared = chi_squared, cramers_v = cramers_v))
+  } else {
+    return("Not enough levels to perform chi-squared test")
+  }
+}
+
+# Perform chi-squared tests and calculate Cramér's V for each specified column separately
+results_dm013 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm013", design), error = function(e) e)
+results_dm003 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm003", design), error = function(e) e)
+results_AgeCategory <- tryCatch(perform_chi_squared_test_and_cramers_v("AgeCategory", design), error = function(e) e)
+results_Education_level <- tryCatch(perform_chi_squared_test_and_cramers_v("Education_level", design), error = function(e) e)
+results_mpce_quintile <- tryCatch(perform_chi_squared_test_and_cramers_v("mpce_quintile.x", design), error = function(e) e)
+results_cv001_new <- tryCatch(perform_chi_squared_test_and_cramers_v("cv001_new", design), error = function(e) e)
+results_dm021 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm021", design), error = function(e) e)
+
+# Print results
+results_dm013
+results_dm003
+results_AgeCategory
+results_Education_level
+results_mpce_quintile
+results_cv001_new
+results_dm021
+
+# Function to create and analyze a contingency table based on highest count
+create_and_analyze_contingency_table <- function(variable, design) {
+  # Create the contingency table
+  table <- svytable(as.formula(paste("~ Decision +", variable)), design)
+  
+  # Print the table
+  print(paste("Contingency table for:", variable))
+  print(table)
+  
+  # Find the maximum count
+  max_count <- which(table == max(table), arr.ind = TRUE)
+  
+  # Print the strongest association based on count
+  strongest_association <- list(
+    row = rownames(table)[max_count[1]],
+    column = colnames(table)[max_count[2]],
+    count = max(table)
+  )
+  
+  print(paste("Strongest association for", variable, "is between",
+              strongest_association$row, "and", strongest_association$column,
+              "with count", strongest_association$count))
+  
+  return(list(table = table, strongest_association = strongest_association))
+}
+
+# Analyze each specified column
+
+result1 <- create_and_analyze_contingency_table("dm003", design)
+
+# Print results
+result1
+
+# Function to create and analyze a contingency table based on highest count
+create_and_analyze_contingency_table <- function(variable, design) {
+  # Create the contingency table
+  table <- svytable(as.formula(paste("~ Decision +", variable)), design)
+  
+  # Print the table
+  print(paste("Contingency table for:", variable))
+  print(table)
+  
+  # Find the maximum count
+  max_count <- which(table == max(table), arr.ind = TRUE)
+  
+  # Print the strongest association based on count
+  strongest_association <- list(
+    row = rownames(table)[max_count[1]],
+    column = colnames(table)[max_count[2]],
+    count = max(table)
+  )
+  
+  print(paste("Strongest association for", variable, "is between",
+              strongest_association$row, "and", strongest_association$column,
+              "with count", strongest_association$count))
+  
+  return(list(table = table, strongest_association = strongest_association))
+}
+
+# Analyze each specified column
+
+result2 <- create_and_analyze_contingency_table("Education_level", design)
+
+# Print results
+result2
+```
+
+```{r}
+# Data preprocessing (if not already done)
+final_data3a <- final_data %>%
+  mutate(
+    Decision = as.factor(Decision),
+    dm003 = as.factor(dm003),
+    Education_level = as.factor(Education_level),
+  ) %>%
+  drop_na(Decision, Education_level, dm003)
+
+# Create survey design object
+design <- svydesign(ids = ~1, data = final_data3a, weights = ~stateindividualweight)
+
+# Function to calculate Cramér's V for weighted data
+weighted_cramers_v <- function(var1, var2, design) {
+  # Create a formula for svytable
+  formula <- as.formula(paste("~", var1, "+", var2))
+  
+  # Create a weighted contingency table
+  tab <- svytable(formula, design)
+  
+  # Calculate chi-squared statistic manually
+  chi2 <- chisq.test(tab, correct = FALSE)$statistic
+  
+  # Extract the number of observations
+  n <- sum(weights(design))
+  
+  # Determine the number of levels in the smallest variable
+  k <- min(nlevels(final_data3a[[var1]]), nlevels(final_data3a[[var2]]))
+  
+  # Calculate Cramér's V
+  cramers_v <- sqrt(chi2 / (n * (k - 1)))
+  
+  return(cramers_v)
+}
+
+# Calculate Cramér's V for each pair of variables
+cramers_v10 <- weighted_cramers_v("Decision", "dm003", design)
+cramers_v6 <- weighted_cramers_v("Decision", "Education_level", design)
+
+print(paste("Cramér's V10:", cramers_v10))
+print(paste("Cramér's V6:", cramers_v6))
+```
+
+
+
+**______SOCIAL RELATIONSHIP**
+
+**I. Interaction with friends and family**
+
+**1. Close Relationship**
+
+
+```{r}
+final_data <- final_data %>%
+  mutate(
+    relation = case_when(
+      # Conditions for "Yes"
+      fs323s1 == "1 Yes" |
+      fs323s2 == "1 Yes" |
+      fs323s3 == "1 Yes" |
+      fs323s4 == "1 Yes" |
+      fs323s5 == "1 Yes" |
+      fs323s6 == "1 Yes" |
+      fs323s7 == "1 Yes" |
+      fs323s8 == "1 Yes" |
+      fs323s9 == "1 Yes" |
+      fs323s10 == "1 Yes" |
+      fs323s11 == "1 Yes" |
+      fs323s12 == "1 Yes" |
+      fs323s13 == "1 Yes" |
+      fs323s14 == "1 Yes" |
+      fs323s15 == "1 Yes" ~ "Yes",
+      
+      # Condition for "No"
+      fs323s16 == "1 Yes" ~ "No",
+      
+      # NA if none of the conditions are met
+      TRUE ~ NA_character_
+    )
+  )
+```
+
+**CHI-SQUARE**
+```{r}
+# Data preprocessing
+final_data7 <- final_data %>%
+  mutate(
+    relation = as.factor(relation),
+    dm013 = as.factor(dm013),
+    dm003 = as.factor(dm003),
+    AgeCategory = as.factor(AgeCategory),
+    Education_level = as.factor(Education_level),
+    mpce_quintile.x = as.factor(mpce_quintile.x),
+    cv001_new = as.factor(cv001_new),
+    dm021_new = as.factor(dm021)
+  ) %>%
+  drop_na(relation, dm013, dm003, AgeCategory, Education_level, mpce_quintile.x, cv001_new, dm021_new)
+
+# Create a survey design object
+design <- svydesign(ids = ~1, data = final_data7, weights = ~stateindividualweight)
+
+# Function to perform chi-squared test and calculate Cramér's V
+perform_chi_squared_test_and_cramers_v <- function(variable, design) {
+  table <- svytable(as.formula(paste("~ relation +", variable)), design)
+  
+  # Add small constant to avoid zero counts
+  table <- table + 1e-6
+  
+  if (length(unique(design$variables[[variable]])) > 1) {
+    chi_squared <- svychisq(as.formula(paste("~ relation +", variable)), design)
+    
+    # Calculate Cramér's V
+    cramers_v <- sqrt(chi_squared$statistic / (sum(table) * (min(dim(table)) - 1)))
+    
+    return(list(chi_squared = chi_squared, cramers_v = cramers_v))
+  } else {
+    return("Not enough levels to perform chi-squared test")
+  }
+}
+
+# Perform chi-squared tests and calculate Cramér's V for each specified column separately
+results_dm013 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm013", design), error = function(e) e)
+results_dm003 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm003", design), error = function(e) e)
+results_AgeCategory <- tryCatch(perform_chi_squared_test_and_cramers_v("AgeCategory", design), error = function(e) e)
+results_Education_level <- tryCatch(perform_chi_squared_test_and_cramers_v("Education_level", design), error = function(e) e)
+results_mpce_quintile <- tryCatch(perform_chi_squared_test_and_cramers_v("mpce_quintile.x", design), error = function(e) e)
+results_cv001_new <- tryCatch(perform_chi_squared_test_and_cramers_v("cv001_new", design), error = function(e) e)
+results_dm021 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm021", design), error = function(e) e)
+
+# Print results
+results_dm013
+results_dm003
+results_AgeCategory
+results_Education_level
+results_mpce_quintile
+results_cv001_new
+results_dm021
+
+
+
+# Function to create and analyze a contingency table based on highest count
+create_and_analyze_contingency_table <- function(variable, design) {
+  # Create the contingency table
+  table <- svytable(as.formula(paste("~ relation +", variable)), design)
+  
+  # Print the table
+  print(paste("Contingency table for:", variable))
+  print(table)
+  
+  # Find the maximum count
+  max_count <- which(table == max(table), arr.ind = TRUE)
+  
+  # Print the strongest association based on count
+  strongest_association <- list(
+    row = rownames(table)[max_count[1]],
+    column = colnames(table)[max_count[2]],
+    count = max(table)
+  )
+  
+  print(paste("Strongest association for", variable, "is between",
+              strongest_association$row, "and", strongest_association$column,
+              "with count", strongest_association$count))
+  
+  return(list(table = table, strongest_association = strongest_association))
+}
+
+# Analyze each specified column
+
+result16 <- create_and_analyze_contingency_table("dm013", design)
+result17 <- create_and_analyze_contingency_table("Education_level", design)
+result17a <- create_and_analyze_contingency_table("dm021_new", design)
+
+
+# Print results
+result16
+result17
+result17a
+```
+
+```{r}
+# Data preprocessing (if not already done)
+final_data1e <- final_data %>%
+  mutate(
+    relation = as.factor(relation),
+    dm013 = as.factor(dm013),
+    Education_level = as.factor(Education_level),
+    dm021_new = as.factor(dm021)
+  ) %>%
+  drop_na(relation, dm013, Education_level, dm021_new)
+
+# Create survey design object
+design <- svydesign(ids = ~1, data = final_data1e, weights = ~stateindividualweight)
+
+# Function to calculate Cramér's V for weighted data
+weighted_cramers_v <- function(var1, var2, design) {
+  # Create a formula for svytable
+  formula <- as.formula(paste("~", var1, "+", var2))
+  
+  # Create a weighted contingency table
+  tab <- svytable(formula, design)
+  
+  # Calculate chi-squared statistic manually
+  chi2 <- chisq.test(tab, correct = FALSE)$statistic
+  
+  # Extract the number of observations
+  n <- sum(weights(design))
+  
+  # Determine the number of levels in the smallest variable
+  k <- min(nlevels(final_data1e[[var1]]), nlevels(final_data1e[[var2]]))
+  
+  # Calculate Cramér's V
+  cramers_v <- sqrt(chi2 / (n * (k - 1)))
+  
+  return(cramers_v)
+}
+
+# Calculate Cramér's V for each pair of variables
+cramers_v20 <- weighted_cramers_v("relation", "dm013", design)
+cramers_v21 <- weighted_cramers_v("relation", "Education_level", design)
+cramers_v22 <- weighted_cramers_v("relation", "dm021_new", design)
+
+print(paste("Cramér's V20:", cramers_v20))
+print(paste("Cramér's V21:", cramers_v21))
+print(paste("Cramér's V22:", cramers_v22))
+```
+
+
+
+**2. Friends**
+
+```{r}
+final_data <- final_data %>%
+  rename(friends = fs324)
+```
+
+**CHI-SQUARE**
+```{r}
+# Data preprocessing
+final_data8 <- final_data %>%
+  mutate(
+    friends = as.factor(friends),
+    dm013 = as.factor(dm013),
+    dm003 = as.factor(dm003),
+    AgeCategory = as.factor(AgeCategory),
+    Education_level = as.factor(Education_level),
+    mpce_quintile.x = as.factor(mpce_quintile.x),
+    cv001_new = as.factor(cv001_new),
+    dm021_new = as.factor(dm021)
+  ) %>%
+  drop_na(friends, dm013, dm003, AgeCategory, Education_level, mpce_quintile.x, cv001_new, dm021_new)
+
+# Create a survey design object
+design <- svydesign(ids = ~1, data = final_data8, weights = ~stateindividualweight)
+
+# Function to perform chi-squared test and calculate Cramér's V
+perform_chi_squared_test_and_cramers_v <- function(variable, design) {
+  table <- svytable(as.formula(paste("~ friends +", variable)), design)
+  
+  # Add small constant to avoid zero counts
+  table <- table + 1e-6
+  
+  if (length(unique(design$variables[[variable]])) > 1) {
+    chi_squared <- svychisq(as.formula(paste("~ friends +", variable)), design)
+    
+    # Calculate Cramér's V
+    cramers_v <- sqrt(chi_squared$statistic / (sum(table) * (min(dim(table)) - 1)))
+    
+    return(list(chi_squared = chi_squared, cramers_v = cramers_v))
+  } else {
+    return("Not enough levels to perform chi-squared test")
+  }
+}
+
+# Perform chi-squared tests and calculate Cramér's V for each specified column separately
+results_dm013 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm013", design), error = function(e) e)
+results_dm003 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm003", design), error = function(e) e)
+results_AgeCategory <- tryCatch(perform_chi_squared_test_and_cramers_v("AgeCategory", design), error = function(e) e)
+results_Education_level <- tryCatch(perform_chi_squared_test_and_cramers_v("Education_level", design), error = function(e) e)
+results_mpce_quintile <- tryCatch(perform_chi_squared_test_and_cramers_v("mpce_quintile.x", design), error = function(e) e)
+results_cv001_new <- tryCatch(perform_chi_squared_test_and_cramers_v("cv001_new", design), error = function(e) e)
+results_dm021 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm021", design), error = function(e) e)
+
+# Print results
+results_dm013
+results_dm003
+results_AgeCategory
+results_Education_level
+results_mpce_quintile
+results_cv001_new
+results_dm021
+
+
+# Function to create and analyze a contingency table based on highest count
+create_and_analyze_contingency_table <- function(variable, design) {
+  # Create the contingency table
+  table <- svytable(as.formula(paste("~ friends +", variable)), design)
+  
+  # Print the table
+  print(paste("Contingency table for:", variable))
+  print(table)
+  
+  # Find the maximum count
+  max_count <- which(table == max(table), arr.ind = TRUE)
+  
+  # Print the strongest association based on count
+  strongest_association <- list(
+    row = rownames(table)[max_count[1]],
+    column = colnames(table)[max_count[2]],
+    count = max(table)
+  )
+  
+  print(paste("Strongest association for", variable, "is between",
+              strongest_association$row, "and", strongest_association$column,
+              "with count", strongest_association$count))
+  
+  return(list(table = table, strongest_association = strongest_association))
+}
+
+# Analyze each specified column
+
+result18 <- create_and_analyze_contingency_table("dm003", design)
+result19 <- create_and_analyze_contingency_table("AgeCategory", design)
+result20 <- create_and_analyze_contingency_table("Education_level", design)
+result21 <- create_and_analyze_contingency_table("mpce_quintile.x", design)
+result22 <- create_and_analyze_contingency_table("cv001_new", design)
+result23 <- create_and_analyze_contingency_table("dm021_new", design)
+
+
+# Print results
+result18
+result19
+result20
+result21
+result22
+result23
+```
+
+
+```{r}
+# Data preprocessing (if not already done)
+final_data1f <- final_data %>%
+  mutate(
+    friends = as.factor(friends),
+    dm003 = as.factor(dm003),
+    AgeCategory = as.factor(AgeCategory),
+    Education_level = as.factor(Education_level),
+    mpce_quintile.x = as.factor(mpce_quintile.x),
+    cv001_new = as.factor(cv001_new),
+    dm021_new = as.factor(dm021)
+  ) %>%
+  drop_na(friends, dm003, AgeCategory, Education_level, mpce_quintile.x, cv001_new, dm021_new)
+
+# Create survey design object
+design <- svydesign(ids = ~1, data = final_data1f, weights = ~stateindividualweight)
+
+# Function to calculate Cramér's V for weighted data
+weighted_cramers_v <- function(var1, var2, design) {
+  # Create a formula for svytable
+  formula <- as.formula(paste("~", var1, "+", var2))
+  
+  # Create a weighted contingency table
+  tab <- svytable(formula, design)
+  
+  # Calculate chi-squared statistic manually
+  chi2 <- chisq.test(tab, correct = FALSE)$statistic
+  
+  # Extract the number of observations
+  n <- sum(weights(design))
+  
+  # Determine the number of levels in the smallest variable
+  k <- min(nlevels(final_data1f[[var1]]), nlevels(final_data1f[[var2]]))
+  
+  # Calculate Cramér's V
+  cramers_v <- sqrt(chi2 / (n * (k - 1)))
+  
+  return(cramers_v)
+}
+
+# Calculate Cramér's V for each pair of variables
+cramers_v24 <- weighted_cramers_v("friends", "dm003", design)
+cramers_v25 <- weighted_cramers_v("friends", "AgeCategory", design)
+cramers_v26 <- weighted_cramers_v("friends", "Education_level", design)
+cramers_v27 <- weighted_cramers_v("friends", "mpce_quintile.x", design)
+cramers_v28 <- weighted_cramers_v("friends", "cv001_new", design)
+cramers_v29 <- weighted_cramers_v("friends", "dm021_new", design)
+
+print(paste("Cramér's V24:", cramers_v24))
+print(paste("Cramér's V25:", cramers_v25))
+print(paste("Cramér's V26:", cramers_v26))
+print(paste("Cramér's V27:", cramers_v27))
+print(paste("Cramér's V28:", cramers_v28))
+print(paste("Cramér's V29:", cramers_v29))
+```
+
+
+
+**1. Member of any Social Group**
+
+```{r}
+final_data<- final_data%>%
+  rename(social_grp = fs501)
+```
+
+**CHI-SQUARE**
+```{r}
+# Data preprocessing
+final_data9 <- final_data %>%
+  mutate(
+    social_grp = as.factor(social_grp),
+    dm013 = as.factor(dm013),
+    dm003 = as.factor(dm003),
+    AgeCategory = as.factor(AgeCategory),
+    Education_level = as.factor(Education_level),
+    mpce_quintile.x = as.factor(mpce_quintile.x),
+    cv001_new = as.factor(cv001_new),
+    dm021 = as.factor(dm021)
+  ) %>%
+  drop_na(social_grp, dm013, dm003, AgeCategory, Education_level, mpce_quintile.x, cv001_new, dm021)
+
+# Create a survey design object
+design <- svydesign(ids = ~1, data = final_data9, weights = ~stateindividualweight)
+
+# Function to perform chi-squared test and calculate Cramér's V
+perform_chi_squared_test_and_cramers_v <- function(variable, design) {
+  table <- svytable(as.formula(paste("~ social_grp +", variable)), design)
+  
+  # Add small constant to avoid zero counts
+  table <- table + 1e-6
+  
+  if (length(unique(design$variables[[variable]])) > 1) {
+    chi_squared <- svychisq(as.formula(paste("~ social_grp +", variable)), design)
+    
+    # Calculate Cramér's V
+    cramers_v <- sqrt(chi_squared$statistic / (sum(table) * (min(dim(table)) - 1)))
+    
+    return(list(chi_squared = chi_squared, cramers_v = cramers_v))
+  } else {
+    return("Not enough levels to perform chi-squared test")
+  }
+}
+
+# Perform chi-squared tests and calculate Cramér's V for each specified column separately
+results_dm013 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm013", design), error = function(e) e)
+results_dm003 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm003", design), error = function(e) e)
+results_AgeCategory <- tryCatch(perform_chi_squared_test_and_cramers_v("AgeCategory", design), error = function(e) e)
+results_Education_level <- tryCatch(perform_chi_squared_test_and_cramers_v("Education_level", design), error = function(e) e)
+results_mpce_quintile <- tryCatch(perform_chi_squared_test_and_cramers_v("mpce_quintile.x", design), error = function(e) e)
+results_cv001_new <- tryCatch(perform_chi_squared_test_and_cramers_v("cv001_new", design), error = function(e) e)
+results_dm021 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm021", design), error = function(e) e)
+
+# Print results
+results_dm013
+results_dm003
+results_AgeCategory
+results_Education_level
+results_mpce_quintile
+results_cv001_new
+results_dm021
+
+
+# Function to create and analyze a contingency table based on highest count
+create_and_analyze_contingency_table <- function(variable, design) {
+  # Create the contingency table
+  table <- svytable(as.formula(paste("~ social_grp +", variable)), design)
+  
+  # Print the table
+  print(paste("Contingency table for:", variable))
+  print(table)
+  
+  # Find the maximum count
+  max_count <- which(table == max(table), arr.ind = TRUE)
+  
+  # Print the strongest association based on count
+  strongest_association <- list(
+    row = rownames(table)[max_count[1]],
+    column = colnames(table)[max_count[2]],
+    count = max(table)
+  )
+  
+  print(paste("Strongest association for", variable, "is between",
+              strongest_association$row, "and", strongest_association$column,
+              "with count", strongest_association$count))
+  
+  return(list(table = table, strongest_association = strongest_association))
+}
+# Analyze each specified column
+
+result24 <- create_and_analyze_contingency_table("dm003", design)
+result25 <- create_and_analyze_contingency_table("AgeCategory", design)
+result26 <- create_and_analyze_contingency_table("Education_level", design)
+result27 <- create_and_analyze_contingency_table("mpce_quintile.x", design)
+result28 <- create_and_analyze_contingency_table("dm021", design)
+
+
+# Print results
+result24
+result25
+result26
+result27
+result28
+```
+
+
+```{r}
+# Data preprocessing (if not already done)
+final_data1g <- final_data %>%
+  mutate(
+    social_grp = as.factor(social_grp),
+    dm003 = as.factor(dm003),
+    AgeCategory = as.factor(AgeCategory),
+    Education_level = as.factor(Education_level),
+    dm021_new = as.factor(dm021)
+  ) %>%
+  drop_na(social_grp, dm003, AgeCategory, Education_level, dm021_new)
+
+# Create survey design object
+design <- svydesign(ids = ~1, data = final_data1g, weights = ~stateindividualweight)
+
+# Function to calculate Cramér's V for weighted data
+weighted_cramers_v <- function(var1, var2, design) {
+  # Create a formula for svytable
+  formula <- as.formula(paste("~", var1, "+", var2))
+  
+  # Create a weighted contingency table
+  tab <- svytable(formula, design)
+  
+  # Calculate chi-squared statistic manually
+  chi2 <- chisq.test(tab, correct = FALSE)$statistic
+  
+  # Extract the number of observations
+  n <- sum(weights(design))
+  
+  # Determine the number of levels in the smallest variable
+  k <- min(nlevels(final_data1g[[var1]]), nlevels(final_data1g[[var2]]))
+  
+  # Calculate Cramér's V
+  cramers_v <- sqrt(chi2 / (n * (k - 1)))
+  
+  return(cramers_v)
+}
+
+# Calculate Cramér's V for each pair of variables
+cramers_v30 <- weighted_cramers_v("social_grp", "dm003", design)
+cramers_v31 <- weighted_cramers_v("social_grp", "AgeCategory", design)
+cramers_v32 <- weighted_cramers_v("social_grp", "Education_level", design)
+cramers_v33 <- weighted_cramers_v("social_grp", "dm021_new", design)
+
+print(paste("Cramér's V30:", cramers_v30))
+print(paste("Cramér's V31:", cramers_v31))
+print(paste("Cramér's V32:", cramers_v32))
+print(paste("Cramér's V33:", cramers_v33))
+```
+
+
+**2. INVOLVEMENT IN Any social Activities**
+```{r}
+final_data<- final_data%>%
+  rename(Eat_out_of_the_house = fs504)
+```
+
+```{r}
+final_data<- final_data%>%
+  rename(Go_to_park_beach_for_relaxing_entertainment = fs505)
+```
+
+```{r}
+final_data<- final_data%>%
+  rename(Play_cards_or_indoor_games = fs506)
+```
+
+```{r}
+final_data<- final_data%>%
+  rename(Play_out_door = fs507)
+```
+
+```{r}
+final_data<- final_data%>%
+  rename(Visit_relatives_friends = fs508)
+```
+
+```{r}
+final_data<- final_data%>%
+  rename(Attend_cultural_performances= fs509)
+```
+
+```{r}
+final_data<- final_data%>%
+  rename(Attend_religious_functions = fs510)
+```
+
+```{r}
+final_data<- final_data%>%
+  rename(Attend_group_meetings = fs511)
+```
+
+
+
+
+*ANOVA*
+```{r}
+# Load the necessary packages
+library(survey)
+library(car)
+
+# Ensure Social_activity_INDEX is correctly computed and available
+final_data <- final_data %>%
+  mutate(Social_activity_INDEX = rowSums(across(c("Eat_out_of_the_house", "Go_to_park_beach_for_relaxing_entertainment", "Play_cards_or_indoor_games", "Play_out_door", "Visit_relatives_friends", "Attend_cultural_performances", "Attend_religious_functions", "Attend_group_meetings"),
+                                                ~ ifelse(. == "7 Never/Not relevant", 0,
+                                                          ifelse(. == "1 Daily", 7,
+                                                                 ifelse(. == "2 Several times a week", 6,
+                                                                        ifelse(. == "3 Once a week", 5,
+                                                                               ifelse(. == "4 Several times a month", 4,
+                                                                                      ifelse(. == "5 At least once a month", 3,
+                                                                                             ifelse(. == "6 Rarely/Once in a year", 2,
+                                                                                                    ifelse(. == "5 Less than once a year", 1, NA)))))))))))
+
+# Function to add "Missing" level and impute NAs
+add_missing_level <- function(column) {
+  if (!("Missing" %in% levels(column))) {
+    levels(column) <- c(levels(column), "Missing")
+  }
+  column[is.na(column)] <- "Missing"
+  return(column)
+}
+
+# Apply the function to each categorical variable
+final_data$dm013 <- add_missing_level(final_data$dm013)
+final_data$dm003 <- add_missing_level(final_data$dm003)
+final_data$AgeCategory <- add_missing_level(final_data$AgeCategory)
+final_data$Education_level <- add_missing_level(final_data$Education_level)
+final_data$mpce_quintile.x <- add_missing_level(final_data$mpce_quintile.x)
+final_data$cv001_new <- add_missing_level(final_data$cv001_new)
+final_data$dm021 <- add_missing_level(final_data$dm021)
+
+# Define the survey design
+design <- svydesign(id = ~1, weights = ~stateindividualweight, data = final_data)
+
+# Perform weighted ANOVA for each categorical variable and get overall p-value
+categorical_vars <- c("dm013", "dm003", "AgeCategory", "Education_level", "mpce_quintile.x", "cv001_new", "dm021")
+anova_results <- list()
+
+for (var in categorical_vars) {
+  formula <- as.formula(paste("Social_activity_INDEX ~", var))
+  # Fit the model
+  fit <- svyglm(formula, design = design)
+  # Get the ANOVA table
+  anova_result <- Anova(fit, type = "II", test = "F")
+  anova_results[[var]] <- anova_result
+}
+
+# Print ANOVA results for each variable
+for (var in categorical_vars) {
+  cat("ANOVA Results for", var, "\n")
+  print(anova_results[[var]])
+}
+
+```
+
+
+*contingency table*
+```{r}
+# Function to create and analyze a contingency table based on highest count
+create_and_analyze_contingency_table <- function(variable, design) {
+  # Create the contingency table
+  contingency_table <- svytable(as.formula(paste("~ Social_activity_INDEX +", variable)), design)
+  
+  # Print the table
+  cat("Contingency table for:", variable, "\n")
+  print(contingency_table)
+  
+  # Find the maximum count
+  max_count <- which(contingency_table == max(contingency_table), arr.ind = TRUE)
+  
+  # Print the strongest association based on count
+  strongest_association <- list(
+    row = rownames(contingency_table)[max_count[1]],
+    column = colnames(contingency_table)[max_count[2]],
+    count = max(contingency_table)
+  )
+  
+  cat("Strongest association for", variable, "is between",
+      strongest_association$row, "and", strongest_association$column,
+      "with count", strongest_association$count, "\n")
+  
+  return(list(table = contingency_table, strongest_association = strongest_association))
+}
+
+# Apply the function to each variable
+contingency_results <- list()
+
+variables <- c("dm013", "dm003", "AgeCategory", "Education_level", "dm021")
+
+for (variable in variables) {
+  result <- create_and_analyze_contingency_table(variable, design)
+  contingency_results[[variable]] <- result
+}
+
+# Accessing results for each variable
+for (variable in variables) {
+  cat("Results for variable:", variable, "\n")
+  print(contingency_results[[variable]]$table)  # Contingency table
+  print(contingency_results[[variable]]$strongest_association)  # Strongest association
+}
+
+```
+
+
+*cohens f square*
+```{r}
+# Load the necessary packages
+library(survey)
+library(car)
+
+# Ensure Social_activity_INDEX is correctly computed and available
+final_data <- final_data %>%
+  mutate(Social_activity_INDEX = rowSums(across(c("Eat_out_of_the_house", "Go_to_park_beach_for_relaxing_entertainment", "Play_cards_or_indoor_games", "Play_out_door", "Visit_relatives_friends", "Attend_cultural_performances", "Attend_religious_functions", "Attend_group_meetings"),
+                                                ~ ifelse(. == "7 Never/Not relevant", 0,
+                                                          ifelse(. == "1 Daily", 7,
+                                                                 ifelse(. == "2 Several times a week", 6,
+                                                                        ifelse(. == "3 Once a week", 5,
+                                                                               ifelse(. == "4 Several times a month", 4,
+                                                                                      ifelse(. == "5 At least once a month", 3,
+                                                                                             ifelse(. == "6 Rarely/Once in a year", 2,
+                                                                                                    ifelse(. == "5 Less than once a year", 1, NA)))))))))))
+
+# Function to add "Missing" level and impute NAs
+add_missing_level <- function(column) {
+  if (!("Missing" %in% levels(column))) {
+    levels(column) <- c(levels(column), "Missing")
+  }
+  column[is.na(column)] <- "Missing"
+  return(column)
+}
+
+# Apply the function to each categorical variable
+final_data$dm013 <- add_missing_level(final_data$dm013)
+final_data$dm003 <- add_missing_level(final_data$dm003)
+final_data$AgeCategory <- add_missing_level(final_data$AgeCategory)
+final_data$Education_level <- add_missing_level(final_data$Education_level)
+final_data$dm021 <- add_missing_level(final_data$dm021)
+
+# Define the survey design
+design <- svydesign(id = ~1, weights = ~stateindividualweight, data = final_data)
+
+# Perform weighted ANOVA for each categorical variable and get overall p-value
+categorical_vars <- c("dm013", "dm003", "AgeCategory", "Education_level", "dm021")
+anova_results <- list()
+
+for (var in categorical_vars) {
+  formula <- as.formula(paste("Social_activity_INDEX ~", var))
+  # Fit the model
+  fit <- svyglm(formula, design = design)
+  # Get the ANOVA table
+  anova_result <- Anova(fit, type = "II", test = "F")
+  anova_results[[var]] <- anova_result
+}
+
+# Calculate Cohen's f^2
+cohen_f2 <- function(anova_table) {
+  partial_eta2 <- anova_table$"Pr(>F)"[1] / (1 - anova_table$"Pr(>F)"[1])
+  f2 <- partial_eta2 / (length(unique(final_data$Social_activity_INDEX)) - 1)
+  return(f2)
+}
+
+# Print Cohen's f^2 for each variable
+for (var in categorical_vars) {
+  cat("Cohen's f^2 for", var, "\n")
+  print(cohen_f2(anova_results[[var]]))
+}
+
+```
+
+
+
+
+**_____SOCIAL WELFARE SCHEME______**
+
+**I. AWARENESS**
+```{r}
+final_data <- final_data %>%
+  mutate(
+    aware = case_when(
+      sw201a == "1 Yes" |
+      (dm003 == "2 Female" & sw201b == "1 Yes") |
+      sw201c == "1 Yes" |
+      sw201d == "1 Yes" |
+      sw201e == "1 Yes" ~ "Yes",
+      sw201a == "2 No" &
+      (dm003 == "2 Female" & sw201b == "2 No") &
+      sw201c == "2 No" &
+      sw201d == "2 No" &
+      sw201e == "2 No" ~ "No",
+      TRUE ~ NA_character_  # Mark all other cases as NA
+    )
+  )
+```
+
+**CHI-SQUARE**
+```{r}
+# Data preprocessing
+final_data4 <- final_data %>%
+  mutate(
+    aware = as.factor(aware),
+    dm013 = as.factor(dm013),
+    dm003 = as.factor(dm003),
+    AgeCategory = as.factor(AgeCategory),
+    Education_level = as.factor(Education_level),
+    mpce_quintile.x = as.factor(mpce_quintile.x),
+    cv001_new = as.factor(cv001_new),
+    dm021_new = as.factor(dm021)
+  ) %>%
+  drop_na(aware, dm013, dm003, AgeCategory, Education_level, mpce_quintile.x, cv001_new, dm021_new)
+
+# Create a survey design object
+design <- svydesign(ids = ~1, data = final_data4, weights = ~stateindividualweight)
+
+# Function to perform chi-squared test and calculate Cramér's V
+perform_chi_squared_test_and_cramers_v <- function(variable, design) {
+  table <- svytable(as.formula(paste("~ aware +", variable)), design)
+  
+  # Add small constant to avoid zero counts
+  table <- table + 1e-6
+  
+  if (length(unique(design$variables[[variable]])) > 1) {
+    chi_squared <- svychisq(as.formula(paste("~ aware +", variable)), design)
+    
+    # Calculate Cramér's V
+    cramers_v <- sqrt(chi_squared$statistic / (sum(table) * (min(dim(table)) - 1)))
+    
+    return(list(chi_squared = chi_squared, cramers_v = cramers_v))
+  } else {
+    return("Not enough levels to perform chi-squared test")
+  }
+}
+
+# Perform chi-squared tests and calculate Cramér's V for each specified column separately
+results_dm013 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm013", design), error = function(e) e)
+results_dm003 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm003", design), error = function(e) e)
+results_AgeCategory <- tryCatch(perform_chi_squared_test_and_cramers_v("AgeCategory", design), error = function(e) e)
+results_Education_level <- tryCatch(perform_chi_squared_test_and_cramers_v("Education_level", design), error = function(e) e)
+results_mpce_quintile <- tryCatch(perform_chi_squared_test_and_cramers_v("mpce_quintile.x", design), error = function(e) e)
+results_cv001_new <- tryCatch(perform_chi_squared_test_and_cramers_v("cv001_new", design), error = function(e) e)
+results_dm021 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm021", design), error = function(e) e)
+
+# Print results
+results_dm013
+results_dm003
+results_AgeCategory
+results_Education_level
+results_mpce_quintile
+results_cv001_new
+results_dm021
+
+
+# Function to create and analyze a contingency table based on highest count
+create_and_analyze_contingency_table <- function(variable, design) {
+  # Create the contingency table
+  table <- svytable(as.formula(paste("~ aware +", variable)), design)
+  
+  # Print the table
+  print(paste("Contingency table for:", variable))
+  print(table)
+  
+  # Find the maximum count
+  max_count <- which(table == max(table), arr.ind = TRUE)
+  
+  # Print the strongest association based on count
+  strongest_association <- list(
+    row = rownames(table)[max_count[1]],
+    column = colnames(table)[max_count[2]],
+    count = max(table)
+  )
+  
+  print(paste("Strongest association for", variable, "is between",
+              strongest_association$row, "and", strongest_association$column,
+              "with count", strongest_association$count))
+  
+  return(list(table = table, strongest_association = strongest_association))
+}
+
+# Analyze each specified column
+result3a <- create_and_analyze_contingency_table("dm003", design)
+result3 <- create_and_analyze_contingency_table("AgeCategory", design)
+result4 <- create_and_analyze_contingency_table("Education_level", design)
+result5 <- create_and_analyze_contingency_table("cv001_new", design)
+result6 <- create_and_analyze_contingency_table("dm021_new", design)
+
+
+# Print results
+result3a
+result3
+result4
+result5
+result6
+
+```
+
+
+```{r}
+# Data preprocessing (if not already done)
+final_data1b <- final_data %>%
+  mutate(
+    aware = as.factor(aware),
+    dm003 = as.factor(dm003),
+    AgeCategory = as.factor(AgeCategory),
+    Education_level = as.factor(Education_level),
+    cv001_new = as.factor(cv001_new),
+    dm021_new = as.factor(dm021)
+  ) %>%
+  drop_na(aware, dm003, AgeCategory, Education_level, cv001_new, dm021_new)
+
+# Create survey design object
+design <- svydesign(ids = ~1, data = final_data1b, weights = ~stateindividualweight)
+
+# Function to calculate Cramér's V for weighted data
+weighted_cramers_v <- function(var1, var2, design) {
+  # Create a formula for svytable
+  formula <- as.formula(paste("~", var1, "+", var2))
+  
+  # Create a weighted contingency table
+  tab <- svytable(formula, design)
+  
+  # Calculate chi-squared statistic manually
+  chi2 <- chisq.test(tab, correct = FALSE)$statistic
+  
+  # Extract the number of observations
+  n <- sum(weights(design))
+  
+  # Determine the number of levels in the smallest variable
+  k <- min(nlevels(final_data1b[[var1]]), nlevels(final_data1b[[var2]]))
+  
+  # Calculate Cramér's V
+  cramers_v <- sqrt(chi2 / (n * (k - 1)))
+  
+  return(cramers_v)
+}
+
+# Calculate Cramér's V for each pair of variables
+cramers_v1 <- weighted_cramers_v("aware", "dm003", design)
+cramers_v2 <- weighted_cramers_v("aware", "AgeCategory", design)
+cramers_v3 <- weighted_cramers_v("aware", "Education_level", design)
+cramers_v4 <- weighted_cramers_v("aware", "cv001_new", design)
+cramers_v5 <- weighted_cramers_v("aware", "dm021_new", design)
+
+print(paste("Cramér's V1:", cramers_v1))
+print(paste("Cramér's V2:", cramers_v2))
+print(paste("Cramér's V3:", cramers_v3))
+print(paste("Cramér's V4:", cramers_v4))
+print(paste("Cramér's V5:", cramers_v5))
+```
+
+
+
+**III. CONCESSIONS**
+
+
+**CHI-SQUARE**
+```{r}
+# Data preprocessing
+final_data5 <- final_data %>%
+  mutate(
+    sw211 = as.factor(sw211),
+    dm013 = as.factor(dm013),
+    dm003 = as.factor(dm003),
+    AgeCategory = as.factor(AgeCategory),
+    Education_level = as.factor(Education_level),
+    mpce_quintile.x = as.factor(mpce_quintile.x),
+    cv001_new = as.factor(cv001_new),
+    dm021_new = as.factor(dm021)
+  ) %>%
+  drop_na(sw211, dm013, dm003, AgeCategory, Education_level, mpce_quintile.x, cv001_new, dm021_new)
+
+# Create a survey design object
+design <- svydesign(ids = ~1, data = final_data5, weights = ~stateindividualweight)
+
+
+# Function to perform chi-squared test and calculate Cramér's V
+perform_chi_squared_test_and_cramers_v <- function(variable, design) {
+  table <- svytable(as.formula(paste("~ sw211 +", variable)), design)
+  
+  # Add small constant to avoid zero counts
+  table <- table + 1e-6
+  
+  if (length(unique(design$variables[[variable]])) > 1) {
+    chi_squared <- svychisq(as.formula(paste("~ sw211 +", variable)), design)
+    
+    # Calculate Cramér's V
+    cramers_v <- sqrt(chi_squared$statistic / (sum(table) * (min(dim(table)) - 1)))
+    
+    return(list(chi_squared = chi_squared, cramers_v = cramers_v))
+  } else {
+    return("Not enough levels to perform chi-squared test")
+  }
+}
+
+# Perform chi-squared tests and calculate Cramér's V for each specified column separately
+results_dm013 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm013", design), error = function(e) e)
+results_dm003 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm003", design), error = function(e) e)
+results_AgeCategory <- tryCatch(perform_chi_squared_test_and_cramers_v("AgeCategory", design), error = function(e) e)
+results_Education_level <- tryCatch(perform_chi_squared_test_and_cramers_v("Education_level", design), error = function(e) e)
+results_mpce_quintile <- tryCatch(perform_chi_squared_test_and_cramers_v("mpce_quintile.x", design), error = function(e) e)
+results_cv001_new <- tryCatch(perform_chi_squared_test_and_cramers_v("cv001_new", design), error = function(e) e)
+results_dm021 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm021", design), error = function(e) e)
+
+# Print results
+results_dm013
+results_dm003
+results_AgeCategory
+results_Education_level
+results_mpce_quintile
+results_cv001_new
+results_dm021
+
+
+# Function to create and analyze a contingency table based on highest count
+create_and_analyze_contingency_table <- function(variable, design) {
+  # Create the contingency table
+  table <- svytable(as.formula(paste("~ sw211 +", variable)), design)
+  
+  # Print the table
+  print(paste("Contingency table for:", variable))
+  print(table)
+  
+  # Find the maximum count
+  max_count <- which(table == max(table), arr.ind = TRUE)
+  
+  # Print the strongest association based on count
+  strongest_association <- list(
+    row = rownames(table)[max_count[1]],
+    column = colnames(table)[max_count[2]],
+    count = max(table)
+  )
+  
+  print(paste("Strongest association for", variable, "is between",
+              strongest_association$row, "and", strongest_association$column,
+              "with count", strongest_association$count))
+  
+  return(list(table = table, strongest_association = strongest_association))
+}
+# Analyze each specified column
+
+result7 <- create_and_analyze_contingency_table("dm013", design)
+result8 <- create_and_analyze_contingency_table("dm003", design)
+result9 <- create_and_analyze_contingency_table("Education_level", design)
+result10 <- create_and_analyze_contingency_table("dm021_new", design)
+
+
+# Print results
+result7
+result8
+result9
+result10
+```
+
+```{r}
+# Data preprocessing 
+final_data1c <- final_data %>%
+  mutate(
+    sw211 = as.factor(sw211),
+    dm013 = as.factor(dm013),
+    dm003 = as.factor(dm003),
+    Education_level = as.factor(Education_level),
+    dm021_new = as.factor(dm021)
+  ) %>%
+  drop_na(sw211, dm013, dm003, Education_level, dm021_new)
+
+# Create survey design object
+design <- svydesign(ids = ~1, data = final_data1c, weights = ~stateindividualweight)
+
+# Function to calculate Cramér's V for weighted data
+weighted_cramers_v <- function(var1, var2, design) {
+  # Create a formula for svytable
+  formula <- as.formula(paste("~", var1, "+", var2))
+  
+  # Create a weighted contingency table
+  tab <- svytable(formula, design)
+  
+  # Calculate chi-squared statistic manually
+  chi2 <- chisq.test(tab, correct = FALSE)$statistic
+  
+  # Extract the number of observations
+  n <- sum(weights(design))
+  
+  # Determine the number of levels in the smallest variable
+  k <- min(nlevels(final_data1c[[var1]]), nlevels(final_data1c[[var2]]))
+  
+  # Calculate Cramér's V
+  cramers_v <- sqrt(chi2 / (n * (k - 1)))
+  
+  return(cramers_v)
+}
+
+# Calculate Cramér's V for each pair of variables
+cramers_v11 <- weighted_cramers_v("sw211", "dm013", design)
+cramers_v12 <- weighted_cramers_v("sw211", "dm003", design)
+cramers_v13 <- weighted_cramers_v("sw211", "Education_level", design)
+cramers_v14 <- weighted_cramers_v("sw211", "dm021_new", design)
+
+print(paste("Cramér's V11:", cramers_v11))
+print(paste("Cramér's V12:", cramers_v12))
+print(paste("Cramér's V13:", cramers_v13))
+print(paste("Cramér's V14:", cramers_v14))
+```
+
+
+
+
+**1. Aware/heard about the “Maintenance and Welfare of Parents and Senior Citizens Act”**
+
+
+**CHI-SQUARE**
+```{r}
+# Data preprocessing
+final_data6 <- final_data %>%
+  mutate(
+    sw213 = as.factor(sw213),
+    dm013 = as.factor(dm013),
+    dm003 = as.factor(dm003),
+    AgeCategory = as.factor(AgeCategory),
+    Education_level = as.factor(Education_level),
+    mpce_quintile.x = as.factor(mpce_quintile.x),
+    cv001_new = as.factor(cv001_new),
+    dm021_new = as.factor(dm021)
+  ) %>%
+  drop_na(sw213, dm013, dm003, AgeCategory, Education_level, mpce_quintile.x, cv001_new, dm021_new)
+
+# Create a survey design object
+design <- svydesign(ids = ~1, data = final_data6, weights = ~stateindividualweight)
+
+
+# Function to perform chi-squared test and calculate Cramér's V
+perform_chi_squared_test_and_cramers_v <- function(variable, design) {
+  table <- svytable(as.formula(paste("~ sw213 +", variable)), design)
+  
+  # Add small constant to avoid zero counts
+  table <- table + 1e-6
+  
+  if (length(unique(design$variables[[variable]])) > 1) {
+    chi_squared <- svychisq(as.formula(paste("~ sw213 +", variable)), design)
+    
+    # Calculate Cramér's V
+    cramers_v <- sqrt(chi_squared$statistic / (sum(table) * (min(dim(table)) - 1)))
+    
+    return(list(chi_squared = chi_squared, cramers_v = cramers_v))
+  } else {
+    return("Not enough levels to perform chi-squared test")
+  }
+}
+
+# Perform chi-squared tests and calculate Cramér's V for each specified column separately
+results_dm013 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm013", design), error = function(e) e)
+results_dm003 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm003", design), error = function(e) e)
+results_AgeCategory <- tryCatch(perform_chi_squared_test_and_cramers_v("AgeCategory", design), error = function(e) e)
+results_Education_level <- tryCatch(perform_chi_squared_test_and_cramers_v("Education_level", design), error = function(e) e)
+results_mpce_quintile <- tryCatch(perform_chi_squared_test_and_cramers_v("mpce_quintile.x", design), error = function(e) e)
+results_cv001_new <- tryCatch(perform_chi_squared_test_and_cramers_v("cv001_new", design), error = function(e) e)
+results_dm021 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm021", design), error = function(e) e)
+
+# Print results
+results_dm013
+results_dm003
+results_AgeCategory
+results_Education_level
+results_mpce_quintile
+results_cv001_new
+results_dm021
+
+
+# Function to create and analyze a contingency table based on highest count
+create_and_analyze_contingency_table <- function(variable, design) {
+  # Create the contingency table
+  table1 <- svytable(as.formula(paste("~ sw213 +", variable)), design)
+  
+  # Print the table
+  print(paste("Contingency table for:", variable))
+  print(table1)
+  
+  # Find the maximum count
+  max_count <- which(table1 == max(table1), arr.ind = TRUE)
+  
+  # Print the strongest association based on count
+  strongest_association <- list(
+    row = rownames(table1)[max_count[1]],
+    column = colnames(table1)[max_count[2]],
+    count = max(table1)
+  )
+  
+  print(paste("Strongest association for", variable, "is between",
+              strongest_association$row, "and", strongest_association$column,
+              "with count", strongest_association$count))
+  
+  return(list(table1 = table1, strongest_association = strongest_association))
+}
+
+# Analyze each specified column
+
+result11 <- create_and_analyze_contingency_table("dm013", design)
+result12 <- create_and_analyze_contingency_table("dm003", design)
+result13 <- create_and_analyze_contingency_table("Education_level", design)
+result14 <- create_and_analyze_contingency_table("mpce_quintile.x", design)
+result15 <- create_and_analyze_contingency_table("dm021_new", design)
+
+
+# Print results
+result11
+result12
+result13
+result14
+result15
+```
+
+
+```{r}
+# Data preprocessing (if not already done)
+final_data1d <- final_data %>%
+  mutate(
+    sw213 = as.factor(sw213),
+    dm013 = as.factor(dm013),
+    dm003 = as.factor(dm003),
+    Education_level = as.factor(Education_level),
+    mpce_quintile.x = as.factor(mpce_quintile.x),
+    dm021_new = as.factor(dm021)
+  ) %>%
+  drop_na(sw213, dm013, dm003, Education_level, mpce_quintile.x, dm021_new)
+
+# Create survey design object
+design <- svydesign(ids = ~1, data = final_data1d, weights = ~stateindividualweight)
+
+# Function to calculate Cramér's V for weighted data
+weighted_cramers_v <- function(var1, var2, design) {
+  # Create a formula for svytable
+  formula <- as.formula(paste("~", var1, "+", var2))
+  
+  # Create a weighted contingency table
+  tab <- svytable(formula, design)
+  
+  # Calculate chi-squared statistic manually
+  chi2 <- chisq.test(tab, correct = FALSE)$statistic
+  
+  # Extract the number of observations
+  n <- sum(weights(design))
+  
+  # Determine the number of levels in the smallest variable
+  k <- min(nlevels(final_data1d[[var1]]), nlevels(final_data1d[[var2]]))
+  
+  # Calculate Cramér's V
+  cramers_v <- sqrt(chi2 / (n * (k - 1)))
+  
+  return(cramers_v)
+}
+
+# Calculate Cramér's V for each pair of variables
+cramers_v15 <- weighted_cramers_v("sw213", "dm013", design)
+cramers_v16 <- weighted_cramers_v("sw213", "dm003", design)
+cramers_v17 <- weighted_cramers_v("sw213", "Education_level", design)
+cramers_v18 <- weighted_cramers_v("sw213", "mpce_quintile.x", design)
+cramers_v19 <- weighted_cramers_v("sw213", "dm021_new", design)
+
+print(paste("Cramér's V15:", cramers_v15))
+print(paste("Cramér's V16:", cramers_v16))
+print(paste("Cramér's V17:", cramers_v17))
+print(paste("Cramér's V18:", cramers_v18))
+print(paste("Cramér's V19:", cramers_v19))
+```
+
+
+
+**________FINANCIAL SUPPORT________**
+
+**I. RECEIVE HELP**
+
+**CHI-SQUARE**
+```{r}
+# Data preprocessing
+final_data10 <- final_data %>%
+  mutate(
+    fs401 = as.factor(fs401),
+    dm013 = as.factor(dm013),
+    dm003 = as.factor(dm003),
+    AgeCategory = as.factor(AgeCategory),
+    Education_level = as.factor(Education_level),
+    mpce_quintile.x = as.factor(mpce_quintile.x),
+    cv001_new = as.factor(cv001_new),
+    dm021 = as.factor(dm021)
+  ) %>%
+  drop_na(fs401, dm013, dm003, AgeCategory, Education_level, mpce_quintile.x, cv001_new, dm021)
+
+# Create a survey design object
+design <- svydesign(ids = ~1, data = final_data10, weights = ~stateindividualweight)
+
+# Function to perform chi-squared test and calculate Cramér's V
+perform_chi_squared_test_and_cramers_v <- function(variable, design) {
+  table <- svytable(as.formula(paste("~ fs401 +", variable)), design)
+  
+  # Add small constant to avoid zero counts
+  table <- table + 1e-6
+  
+  if (length(unique(design$variables[[variable]])) > 1) {
+    chi_squared <- svychisq(as.formula(paste("~ fs401 +", variable)), design)
+    
+    # Calculate Cramér's V
+    cramers_v <- sqrt(chi_squared$statistic / (sum(table) * (min(dim(table)) - 1)))
+    
+    return(list(chi_squared = chi_squared, cramers_v = cramers_v))
+  } else {
+    return("Not enough levels to perform chi-squared test")
+  }
+}
+
+# Perform chi-squared tests and calculate Cramér's V for each specified column separately
+results_dm013 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm013", design), error = function(e) e)
+results_dm003 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm003", design), error = function(e) e)
+results_AgeCategory <- tryCatch(perform_chi_squared_test_and_cramers_v("AgeCategory", design), error = function(e) e)
+results_Education_level <- tryCatch(perform_chi_squared_test_and_cramers_v("Education_level", design), error = function(e) e)
+results_mpce_quintile <- tryCatch(perform_chi_squared_test_and_cramers_v("mpce_quintile.x", design), error = function(e) e)
+results_cv001_new <- tryCatch(perform_chi_squared_test_and_cramers_v("cv001_new", design), error = function(e) e)
+results_dm021 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm021", design), error = function(e) e)
+
+# Print results
+results_dm013
+results_dm003
+results_AgeCategory
+results_Education_level
+results_mpce_quintile
+results_cv001_new
+results_dm021
+
+
+# Function to create and analyze a contingency table based on highest count
+create_and_analyze_contingency_table <- function(variable, design) {
+  # Create the contingency table
+  table <- svytable(as.formula(paste("~ fs401 +", variable)), design)
+  
+  # Print the table
+  print(paste("Contingency table for:", variable))
+  print(table)
+  
+  # Find the maximum count
+  max_count <- which(table == max(table), arr.ind = TRUE)
+  
+  # Print the strongest association based on count
+  strongest_association <- list(
+    row = rownames(table)[max_count[1]],
+    column = colnames(table)[max_count[2]],
+    count = max(table)
+  )
+  
+  print(paste("Strongest association for", variable, "is between",
+              strongest_association$row, "and", strongest_association$column,
+              "with count", strongest_association$count))
+  
+  return(list(table = table, strongest_association = strongest_association))
+}
+
+# Analyze each specified column
+
+result29 <- create_and_analyze_contingency_table("Education_level", design)
+result30 <- create_and_analyze_contingency_table("cv001_new", design)
+result31 <- create_and_analyze_contingency_table("dm021", design)
+
+
+# Print results
+result29
+result30
+result31
+```
+
+
+```{r}
+# Data preprocessing (if not already done)
+final_data1g <- final_data %>%
+  mutate(
+    fs401 = as.factor(fs401),
+    Education_level = as.factor(Education_level),
+    cv001_new = as.factor(cv001_new),
+    dm021_new = as.factor(dm021)
+  ) %>%
+  drop_na(fs401, Education_level, cv001_new, dm021_new)
+
+# Create survey design object
+design <- svydesign(ids = ~1, data = final_data1g, weights = ~stateindividualweight)
+
+# Function to calculate Cramér's V for weighted data
+weighted_cramers_v <- function(var1, var2, design) {
+  # Create a formula for svytable
+  formula <- as.formula(paste("~", var1, "+", var2))
+  
+  # Create a weighted contingency table
+  tab <- svytable(formula, design)
+  
+  # Calculate chi-squared statistic manually
+  chi2 <- chisq.test(tab, correct = FALSE)$statistic
+  
+  # Extract the number of observations
+  n <- sum(weights(design))
+  
+  # Determine the number of levels in the smallest variable
+  k <- min(nlevels(final_data1g[[var1]]), nlevels(final_data1g[[var2]]))
+  
+  # Calculate Cramér's V
+  cramers_v <- sqrt(chi2 / (n * (k - 1)))
+  
+  return(cramers_v)
+}
+
+# Calculate Cramér's V for each pair of variables
+cramers_v34 <- weighted_cramers_v("fs401", "Education_level", design)
+cramers_v35 <- weighted_cramers_v("fs401", "cv001_new", design)
+cramers_v36 <- weighted_cramers_v("fs401", "dm021_new", design)
+
+print(paste("Cramér's V34:", cramers_v34))
+print(paste("Cramér's V35:", cramers_v35))
+print(paste("Cramér's V36:", cramers_v36))
+```
+
+
+
+**2. PROVIDE HELP**
+
+**CHI-SQUARE**
+```{r}
+# Data preprocessing
+final_data11 <- final_data %>%
+  mutate(
+    fs404 = as.factor(fs404),
+    dm013 = as.factor(dm013),
+    dm003 = as.factor(dm003),
+    AgeCategory = as.factor(AgeCategory),
+    Education_level = as.factor(Education_level),
+    mpce_quintile.x = as.factor(mpce_quintile.x),
+    cv001_new = as.factor(cv001_new),
+    dm021 = as.factor(dm021)
+  ) %>%
+  drop_na(fs404, dm013, dm003, AgeCategory, Education_level, mpce_quintile.x, cv001_new, dm021)
+
+# Create a survey design object
+design <- svydesign(ids = ~1, data = final_data11, weights = ~stateindividualweight)
+
+# Function to perform chi-squared test and calculate Cramér's V
+perform_chi_squared_test_and_cramers_v <- function(variable, design) {
+  table <- svytable(as.formula(paste("~ fs404 +", variable)), design)
+  
+  # Add small constant to avoid zero counts
+  table <- table + 1e-6
+  
+  if (length(unique(design$variables[[variable]])) > 1) {
+    chi_squared <- svychisq(as.formula(paste("~ fs404 +", variable)), design)
+    
+    # Calculate Cramér's V
+    cramers_v <- sqrt(chi_squared$statistic / (sum(table) * (min(dim(table)) - 1)))
+    
+    return(list(chi_squared = chi_squared, cramers_v = cramers_v))
+  } else {
+    return("Not enough levels to perform chi-squared test")
+  }
+}
+
+# Perform chi-squared tests and calculate Cramér's V for each specified column separately
+results_dm013 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm013", design), error = function(e) e)
+results_dm003 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm003", design), error = function(e) e)
+results_AgeCategory <- tryCatch(perform_chi_squared_test_and_cramers_v("AgeCategory", design), error = function(e) e)
+results_Education_level <- tryCatch(perform_chi_squared_test_and_cramers_v("Education_level", design), error = function(e) e)
+results_mpce_quintile <- tryCatch(perform_chi_squared_test_and_cramers_v("mpce_quintile.x", design), error = function(e) e)
+results_cv001_new <- tryCatch(perform_chi_squared_test_and_cramers_v("cv001_new", design), error = function(e) e)
+results_dm021 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm021", design), error = function(e) e)
+
+# Print results
+results_dm013
+results_dm003
+results_AgeCategory
+results_Education_level
+results_mpce_quintile
+results_cv001_new
+results_dm021
+
+
+# Function to create and analyze a contingency table based on highest count
+create_and_analyze_contingency_table <- function(variable, design) {
+  # Create the contingency table
+  table <- svytable(as.formula(paste("~ fs404 +", variable)), design)
+  
+  # Print the table
+  print(paste("Contingency table for:", variable))
+  print(table)
+  
+  # Find the maximum count
+  max_count <- which(table == max(table), arr.ind = TRUE)
+  
+  # Print the strongest association based on count
+  strongest_association <- list(
+    row = rownames(table)[max_count[1]],
+    column = colnames(table)[max_count[2]],
+    count = max(table)
+  )
+  
+  print(paste("Strongest association for", variable, "is between",
+              strongest_association$row, "and", strongest_association$column,
+              "with count", strongest_association$count))
+  
+  return(list(table = table, strongest_association = strongest_association))
+}
+
+# Analyze each specified column
+
+result32 <- create_and_analyze_contingency_table("dm003", design)
+result33 <- create_and_analyze_contingency_table("AgeCategory", design)
+result34 <- create_and_analyze_contingency_table("Education_level", design)
+result35 <- create_and_analyze_contingency_table("mpce_quintile.x", design)
+result36 <- create_and_analyze_contingency_table("dm021", design)
+
+
+# Print results
+result32
+result33
+result34
+result35
+result36
+```
+
+
+
+```{r}
+# Data preprocessing (if not already done)
+final_data11 <- final_data %>%
+  mutate(
+    fs404 = as.factor(fs404),
+    dm003 = as.factor(dm003),
+    AgeCategory = as.factor(AgeCategory),
+    Education_level = as.factor(Education_level),
+    mpce_quintile.x = as.factor(mpce_quintile.x),
+    dm021_new = as.factor(dm021)
+  ) %>%
+  drop_na(fs404, dm003, AgeCategory, Education_level, mpce_quintile.x, dm021_new)
+
+# Create survey design object
+design <- svydesign(ids = ~1, data = final_data11, weights = ~stateindividualweight)
+
+# Function to calculate Cramér's V for weighted data
+weighted_cramers_v <- function(var1, var2, design) {
+  # Create a formula for svytable
+  formula <- as.formula(paste("~", var1, "+", var2))
+  
+  # Create a weighted contingency table
+  tab <- svytable(formula, design)
+  
+  # Calculate chi-squared statistic manually
+  chi2 <- chisq.test(tab, correct = FALSE)$statistic
+  
+  # Extract the number of observations
+  n <- sum(weights(design))
+  
+  # Determine the number of levels in the smallest variable
+  k <- min(nlevels(final_data11[[var1]]), nlevels(final_data11[[var2]]))
+  
+  # Calculate Cramér's V
+  cramers_v <- sqrt(chi2 / (n * (k - 1)))
+  
+  return(cramers_v)
+}
+
+# Calculate Cramér's V for each pair of variables
+cramers_v37 <- weighted_cramers_v("fs404", "dm003", design)
+cramers_v38 <- weighted_cramers_v("fs404", "AgeCategory", design)
+cramers_v39 <- weighted_cramers_v("fs404", "Education_level", design)
+cramers_v40 <- weighted_cramers_v("fs404", "mpce_quintile.x", design)
+cramers_v41 <- weighted_cramers_v("fs404", "dm021_new", design)
+
+print(paste("Cramér's V37:", cramers_v37))
+print(paste("Cramér's V38:", cramers_v38))
+print(paste("Cramér's V39:", cramers_v39))
+print(paste("Cramér's V40:", cramers_v40))
+print(paste("Cramér's V41:", cramers_v41))
+```
+
+
+
+**_____EMPLOYMENT_____**
+
+
+**CURRENT EMPLOYMENT STATUS**
+```{r}
+final_data<- final_data%>%
+  rename(Employed = we004)
+```
+
+```{r}
+# Replace NA values in the Employed column with "Never worked"
+final_data$Employed[is.na(final_data$Employed)] <- "Never worked"
+```
+
+**CHI-SQUARE**
+```{r}
+# Data preprocessing
+final_data12 <- final_data %>%
+  mutate(
+    Employed = as.factor(Employed),
+    dm013 = as.factor(dm013),
+    dm003 = as.factor(dm003),
+    AgeCategory = as.factor(AgeCategory),
+    Education_level = as.factor(Education_level),
+    mpce_quintile.x = as.factor(mpce_quintile.x),
+    cv001_new = as.factor(cv001_new),
+    dm021 = as.factor(dm021)
+  ) %>%
+  drop_na(Employed, dm013, dm003, AgeCategory, Education_level, mpce_quintile.x, cv001_new, dm021)
+
+# Create a survey design object
+design <- svydesign(ids = ~1, data = final_data12, weights = ~stateindividualweight)
+
+# Function to perform chi-squared test and calculate Cramér's V
+perform_chi_squared_test_and_cramers_v <- function(variable, design) {
+  table <- svytable(as.formula(paste("~ Employed +", variable)), design)
+  
+  # Add small constant to avoid zero counts
+  table <- table + 1e-6
+  
+  if (length(unique(design$variables[[variable]])) > 1) {
+    chi_squared <- svychisq(as.formula(paste("~ Employed +", variable)), design)
+    
+    # Calculate Cramér's V
+    cramers_v <- sqrt(chi_squared$statistic / (sum(table) * (min(dim(table)) - 1)))
+    
+    return(list(chi_squared = chi_squared, cramers_v = cramers_v))
+  } else {
+    return("Not enough levels to perform chi-squared test")
+  }
+}
+
+# Perform chi-squared tests and calculate Cramér's V for each specified column separately
+results_dm013 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm013", design), error = function(e) e)
+results_dm003 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm003", design), error = function(e) e)
+results_AgeCategory <- tryCatch(perform_chi_squared_test_and_cramers_v("AgeCategory", design), error = function(e) e)
+results_Education_level <- tryCatch(perform_chi_squared_test_and_cramers_v("Education_level", design), error = function(e) e)
+results_mpce_quintile <- tryCatch(perform_chi_squared_test_and_cramers_v("mpce_quintile.x", design), error = function(e) e)
+results_cv001_new <- tryCatch(perform_chi_squared_test_and_cramers_v("cv001_new", design), error = function(e) e)
+results_dm021 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm021", design), error = function(e) e)
+
+# Print results
+results_dm013
+results_dm003
+results_AgeCategory
+results_Education_level
+results_mpce_quintile
+results_cv001_new
+results_dm021
+
+# Function to create and analyze a contingency table based on highest count
+create_and_analyze_contingency_table <- function(variable, design) {
+  # Create the contingency table
+  table <- svytable(as.formula(paste("~ Employed +", variable)), design)
+  
+  # Print the table
+  print(paste("Contingency table for:", variable))
+  print(table)
+  
+  # Find the maximum count
+  max_count <- which(table == max(table), arr.ind = TRUE)
+  
+  # Print the strongest association based on count
+  strongest_association <- list(
+    row = rownames(table)[max_count[1]],
+    column = colnames(table)[max_count[2]],
+    count = max(table)
+  )
+  
+  print(paste("Strongest association for", variable, "is between",
+              strongest_association$row, "and", strongest_association$column,
+              "with count", strongest_association$count))
+  
+  return(list(table = table, strongest_association = strongest_association))
+}
+# Analyze each specified column
+result37 <- create_and_analyze_contingency_table("dm013", design)
+result38 <- create_and_analyze_contingency_table("dm003", design)
+result39 <- create_and_analyze_contingency_table("AgeCategory", design)
+result40 <- create_and_analyze_contingency_table("Education_level", design)
+result41 <- create_and_analyze_contingency_table("dm021", design)
+
+
+# Print results
+result37
+result38
+result39
+result40
+result41
+```
+
+
+```{r}
+# Data preprocessing (if not already done)
+final_data12 <- final_data %>%
+  mutate(
+    Employed = as.factor(aware),
+    dm013 = as.factor(dm013),
+    dm003 = as.factor(dm003),
+    AgeCategory = as.factor(AgeCategory),
+    Education_level = as.factor(Education_level),
+    dm021_new = as.factor(dm021)
+  ) %>%
+  drop_na(aware, dm013, dm003, AgeCategory, Education_level, dm021_new)
+
+# Create survey design object
+design <- svydesign(ids = ~1, data = final_data12, weights = ~stateindividualweight)
+
+# Function to calculate Cramér's V for weighted data
+weighted_cramers_v <- function(var1, var2, design) {
+  # Create a formula for svytable
+  formula <- as.formula(paste("~", var1, "+", var2))
+  
+  # Create a weighted contingency table
+  tab <- svytable(formula, design)
+  
+  # Calculate chi-squared statistic manually
+  chi2 <- chisq.test(tab, correct = FALSE)$statistic
+  
+  # Extract the number of observations
+  n <- sum(weights(design))
+  
+  # Determine the number of levels in the smallest variable
+  k <- min(nlevels(final_data12[[var1]]), nlevels(final_data12[[var2]]))
+  
+  # Calculate Cramér's V
+  cramers_v <- sqrt(chi2 / (n * (k - 1)))
+  
+  return(cramers_v)
+}
+
+# Calculate Cramér's V for each pair of variables
+cramers_v42 <- weighted_cramers_v("Employed", "dm013", design)
+cramers_v43 <- weighted_cramers_v("Employed", "dm003", design)
+cramers_v44 <- weighted_cramers_v("Employed", "AgeCategory", design)
+cramers_v45 <- weighted_cramers_v("Employed", "Education_level", design)
+cramers_v46 <- weighted_cramers_v("Employed", "dm021_new", design)
+
+print(paste("Cramér's V42:", cramers_v42))
+print(paste("Cramér's V43:", cramers_v43))
+print(paste("Cramér's V44:", cramers_v44))
+print(paste("Cramér's V45:", cramers_v45))
+print(paste("Cramér's V46:", cramers_v46))
+```
+
+
+
+
+**II.1. CURRENTLY NOT WORKING - Reason**
+```{r}
+currently_not_working<- final_data%>%
+  filter(Employed == "2 No")
+```
+
+```{r}
+currently_not_working <- currently_not_working %>%
+  rename(Reason_current_not_working = we005)
+```
+
+
+**CHI-SQUARE**
+```{r}
+# Data preprocessing
+currently_not_working1 <- currently_not_working %>%
+  mutate(
+    Reason_current_not_working = as.factor(Reason_current_not_working),
+    dm013 = as.factor(dm013),
+    dm003 = as.factor(dm003),
+    AgeCategory = as.factor(AgeCategory),
+    Education_level = as.factor(Education_level),
+    mpce_quintile.x = as.factor(mpce_quintile.x),
+    cv001_new = as.factor(cv001_new),
+    dm021 = as.factor(dm021)
+  ) %>%
+  drop_na(Reason_current_not_working, dm013, dm003, AgeCategory, Education_level, mpce_quintile.x, cv001_new, dm021)
+
+# Create a survey design object
+design <- svydesign(ids = ~1, data = currently_not_working1, weights = ~stateindividualweight)
+
+perform_chi_squared_test <- function(variable, design) {
+  table <- svytable(as.formula(paste("~ Reason_current_not_working +", variable)), design)
+  
+  # Add small constant to avoid zero counts
+  table <- table + 1e-6
+  
+  if (length(unique(design$variables[[variable]])) > 1) {
+    chi_squared <- svychisq(as.formula(paste("~ Reason_current_not_working +", variable)), design)
+    return(chi_squared)
+  } else {
+    return("Not enough levels to perform chi-squared test")
+  }
+}
+
+# Perform chi-squared tests for each specified column separately
+chi_squared_dm013 <- tryCatch(perform_chi_squared_test("dm013", design), error = function(e) e)
+chi_squared_dm003 <- tryCatch(perform_chi_squared_test("dm003", design), error = function(e) e)
+chi_squared_AgeCategory <- tryCatch(perform_chi_squared_test("AgeCategory", design), error = function(e) e)
+chi_squared_Education_level <- tryCatch(perform_chi_squared_test("Education_level", design), error = function(e) e)
+chi_squared_mpce_quintile <- tryCatch(perform_chi_squared_test("mpce_quintile.x", design), error = function(e) e)
+chi_squared_cv001_new <- tryCatch(perform_chi_squared_test("cv001_new", design), error = function(e) e)
+chi_squared_dm021 <- tryCatch(perform_chi_squared_test("dm021", design), error = function(e) e)
+
+# Print results
+chi_squared_dm013
+chi_squared_dm003
+chi_squared_AgeCategory
+chi_squared_Education_level
+chi_squared_mpce_quintile
+chi_squared_cv001_new
+chi_squared_dm021
+
+
+
+# Function to create and analyze a contingency table
+create_and_analyze_contingency_table <- function(variable, design) {
+  # Create the contingency table
+  table <- svytable(as.formula(paste("~  Reason_current_not_working +", variable)), design)
+  
+  # Print the table
+  print(paste("Contingency table for:", variable))
+  print(table)
+  
+  # Calculate row and column sums
+  row_sums <- apply(table, 1, sum)
+  col_sums <- apply(table, 2, sum)
+  
+  # Calculate expected frequencies
+  total <- sum(table)
+  expected <- outer(row_sums, col_sums) / total
+  
+  # Calculate the contribution to chi-squared statistic for each cell
+  contribution <- (table - expected)^2 / expected
+  
+  # Find the maximum contribution
+  max_contribution <- which(contribution == max(contribution), arr.ind = TRUE)
+  
+  # Print the strongest association
+  strongest_association <- list(
+    row = rownames(table)[max_contribution[1]],
+    column = colnames(table)[max_contribution[2]],
+    contribution = max(contribution)
+  )
+  
+  print(paste("Strongest association for", variable, "is between",
+              strongest_association$row, "and", strongest_association$column,
+              "with contribution", strongest_association$contribution))
+  
+  return(list(table = table, strongest_association = strongest_association))
+}
+
+# Analyze each specified column
+result42 <- create_and_analyze_contingency_table("dm003", design)
+result43 <- create_and_analyze_contingency_table("Education_level", design)
+result44 <- create_and_analyze_contingency_table("mpce_quintile.x", design)
+
+
+# Print results
+result42
+result43
+result44
+```
+
+```{r}
+# Data preprocessing
+currently_not_working1 <- currently_not_working %>%
+  mutate(
+    we003_other = as.factor(we003_other),
+    Education_level = as.factor(Education_level)
+  ) %>%
+  drop_na(we003_other, Education_level)
+
+# Create a survey design object
+design <- svydesign(ids = ~1, data = currently_not_working1, weights = ~stateindividualweight)
+
+perform_chi_squared_test <- function(variable, design) {
+  table <- svytable(as.formula(paste("~ we003_other +", variable)), design)
+  
+  # Add small constant to avoid zero counts
+  table <- table + 1e-6
+  
+  if (length(unique(design$variables[[variable]])) > 1) {
+    chi_squared <- svychisq(as.formula(paste("~ we003_other +", variable)), design)
+    return(chi_squared)
+  } else {
+    return("Not enough levels to perform chi-squared test")
+  }
+}
+
+# Perform chi-squared tests for each specified column separately
+chi_squared_Education_level <- tryCatch(perform_chi_squared_test("Education_level", design), error = function(e) e)
+
+# Print results
+
+chi_squared_Education_level
+
+
+# Function to create and analyze a contingency table
+create_and_analyze_contingency_table <- function(variable, design) {
+  # Create the contingency table
+  table <- svytable(as.formula(paste("~  we003_other +", variable)), design)
+  
+  # Print the table
+  print(paste("Contingency table for:", variable))
+  print(table)
+  
+  # Calculate row and column sums
+  row_sums <- apply(table, 1, sum)
+  col_sums <- apply(table, 2, sum)
+  
+  # Calculate expected frequencies
+  total <- sum(table)
+  expected <- outer(row_sums, col_sums) / total
+  
+  # Calculate the contribution to chi-squared statistic for each cell
+  contribution <- (table - expected)^2 / expected
+  
+  # Find the maximum contribution
+  max_contribution <- which(contribution == max(contribution), arr.ind = TRUE)
+  
+  # Print the strongest association
+  strongest_association <- list(
+    row = rownames(table)[max_contribution[1]],
+    column = colnames(table)[max_contribution[2]],
+    contribution = max(contribution)
+  )
+  
+  print(paste("Strongest association for", variable, "is between",
+              strongest_association$row, "and", strongest_association$column,
+              "with contribution", strongest_association$contribution))
+  
+  return(list(table = table, strongest_association = strongest_association))
+}
+
+# Analyze each specified column
+result43a <- create_and_analyze_contingency_table("Education_level", design)
+
+
+# Print results
+result43a
+```
+
+
+
+**III. CURRENTLY WORKING** 
+
+**III.1. CURRENTLY WORKING - OCCUPATION** 
+```{r}
+labour_force<- final_data%>%
+  filter(Employed == "1 Yes")
+```
+
+```{r}
+labour_force<- labour_force %>%
+  rename(Occupation = we027)
+```
+
+```{r}
+labour_force$Occupation <- ifelse(labour_force$Occupation == "9", "9 Elementary occupations", labour_force$Occupation)
+labour_force$Occupation <- ifelse(labour_force$Occupation == "4", "4 Clerks", labour_force$Occupation)
+labour_force$Occupation <- ifelse(labour_force$Occupation == "5", "5 Service workers and shop and market sales workers", labour_force$Occupation)
+labour_force$Occupation <- ifelse(labour_force$Occupation == "6", "6 Skilled agricultural and fishery workers", labour_force$Occupation)
+labour_force$Occupation <- ifelse(labour_force$Occupation == "7", "7 Craft and related trade workers", labour_force$Occupation)
+labour_force$Occupation <- ifelse(labour_force$Occupation == "8", "8 Plant and machine operators and assemblers", labour_force$Occupation)
+labour_force$Occupation <- ifelse(labour_force$Occupation == "10", "10 Workers not classified anywhere", labour_force$Occupation)
+labour_force$Occupation <- ifelse(labour_force$Occupation == "11", "11 Other", labour_force$Occupation)
+```
+
+**CHI-SQUARE**
+```{r}
+# Data preprocessing
+labour_force1 <- labour_force %>%
+  mutate(
+    Occupation = as.factor(Occupation),
+    dm013 = as.factor(dm013),
+    dm003 = as.factor(dm003),
+    AgeCategory = as.factor(AgeCategory),
+    Education_level = as.factor(Education_level),
+    mpce_quintile.x = as.factor(mpce_quintile.x),
+    cv001_new = as.factor(cv001_new),
+    dm021 = as.factor(dm021)
+  ) %>%
+  drop_na(Occupation, dm013, dm003, AgeCategory, Education_level, mpce_quintile.x, cv001_new, dm021)
+
+# Create a survey design object
+design <- svydesign(ids = ~1, data = labour_force1 , weights = ~stateindividualweight)
+
+perform_chi_squared_test <- function(variable, design) {
+  table <- svytable(as.formula(paste("~ Occupation +", variable)), design)
+  
+  # Add small constant to avoid zero counts
+  table <- table + 1e-6
+  
+  if (length(unique(design$variables[[variable]])) > 1) {
+    chi_squared <- svychisq(as.formula(paste("~ Occupation +", variable)), design)
+    return(chi_squared)
+  } else {
+    return("Not enough levels to perform chi-squared test")
+  }
+}
+
+# Perform chi-squared tests for each specified column separately
+chi_squared_dm013 <- tryCatch(perform_chi_squared_test("dm013", design), error = function(e) e)
+chi_squared_AgeCategory <- tryCatch(perform_chi_squared_test("AgeCategory", design), error = function(e) e)
+chi_squared_Education_level <- tryCatch(perform_chi_squared_test("Education_level", design), error = function(e) e)
+chi_squared_mpce_quintile <- tryCatch(perform_chi_squared_test("mpce_quintile.x", design), error = function(e) e)
+chi_squared_dm021 <- tryCatch(perform_chi_squared_test("dm021", design), error = function(e) e)
+
+# Print results
+chi_squared_dm013
+chi_squared_AgeCategory
+chi_squared_Education_level
+chi_squared_mpce_quintile
+chi_squared_dm021
+```
+
+```{r}
+# Data preprocessing
+labour_force1 <- labour_force %>%
+  mutate(
+    Occupation = as.factor(Occupation),
+    dm013 = as.factor(dm013),
+    AgeCategory = as.factor(AgeCategory),
+    Education_level = as.factor(Education_level),
+    mpce_quintile.x = as.factor(mpce_quintile.x),
+    dm021 = as.factor(dm021)
+  ) %>%
+  drop_na(Occupation, dm013, dm003, AgeCategory, Education_level, mpce_quintile.x, cv001_new, dm021)
+
+# Create a survey design object
+design <- svydesign(ids = ~1, data = labour_force1, weights = ~stateindividualweight)
+
+perform_logistic_regression <- function(variable, design) {
+  formula <- as.formula(paste("Occupation ~", variable))
+  
+  if (length(unique(design$variables[[variable]])) > 1) {
+    model <- svyglm(formula, design, family = quasibinomial())
+    
+    # Get p-value for the overall effect of the predictor
+    p_value <- anova(model, test = "Chisq")$`Pr(>Chi)`[2]
+    
+    return(p_value)
+  } else {
+    return("Not enough levels to perform logistic regression")
+  }
+}
+
+# Perform logistic regressions for each specified column separately
+p_value_dm013 <- tryCatch(perform_logistic_regression("dm013", design), error = function(e) e)
+p_value_dm003 <- tryCatch(perform_logistic_regression("dm003", design), error = function(e) e)
+p_value_AgeCategory <- tryCatch(perform_logistic_regression("AgeCategory", design), error = function(e) e)
+p_value_Education_level <- tryCatch(perform_logistic_regression("Education_level", design), error = function(e) e)
+p_value_mpce_quintile <- tryCatch(perform_logistic_regression("mpce_quintile.x", design), error = function(e) e)
+p_value_cv001_new <- tryCatch(perform_logistic_regression("cv001_new", design), error = function(e) e)
+p_value_dm021 <- tryCatch(perform_logistic_regression("dm021", design), error = function(e) e)
+
+# Print results
+print("P-value for dm013:")
+print(p_value_dm013)
+
+print("P-value for dm003:")
+print(p_value_dm003)
+
+print("P-value for AgeCategory:")
+print(p_value_AgeCategory)
+
+print("P-value for Education_level:")
+print(p_value_Education_level)
+
+print("P-value for mpce_quintile.x:")
+print(p_value_mpce_quintile)
+
+print("P-value for cv001_new:")
+print(p_value_cv001_new)
+
+print("P-value for dm021:")
+print(p_value_dm021)
+```
+
+**I. Financial Security - Pension**
+```{r}
+current_scenario<- bind_rows(labour_force, currently_not_working)
+```
+
+```{r}
+current_scenario <- current_scenario %>%
+  mutate(we412 = ifelse(is.na(we412), "NA", we412),
+         we412 = ifelse(we412 %in% c("1 Currently receiving", "2 Expected to receive in future"), 
+                        "Currently receiving or expected to receive", we412))
+
+```
+
+
+**CHI-SQUARE**
+```{r}
+# Data preprocessing
+current_scenario2 <- current_scenario %>%
+  mutate(
+    we412 = as.factor(we412),
+    dm013 = as.factor(dm013),
+    dm003 = as.factor(dm003),
+    AgeCategory = as.factor(AgeCategory),
+    Education_level = as.factor(Education_level),
+    mpce_quintile.x = as.factor(mpce_quintile.x),
+    cv001_new = as.factor(cv001_new),
+    dm021 = as.factor(dm021)
+  ) %>%
+  drop_na(we412, dm013, dm003, AgeCategory, Education_level, mpce_quintile.x, cv001_new, dm021)
+
+# Create a survey design object
+design <- svydesign(ids = ~1, data = current_scenario2 , weights = ~stateindividualweight)
+
+# Function to perform chi-squared test and calculate Cramér's V
+perform_chi_squared_test_and_cramers_v <- function(variable, design) {
+  table <- svytable(as.formula(paste("~ we412 +", variable)), design)
+  
+  # Add small constant to avoid zero counts
+  table <- table + 1e-6
+  
+  if (length(unique(design$variables[[variable]])) > 1) {
+    chi_squared <- svychisq(as.formula(paste("~ we412 +", variable)), design)
+    
+    # Calculate Cramér's V
+    cramers_v <- sqrt(chi_squared$statistic / (sum(table) * (min(dim(table)) - 1)))
+    
+    return(list(chi_squared = chi_squared, cramers_v = cramers_v))
+  } else {
+    return("Not enough levels to perform chi-squared test")
+  }
+}
+
+# Perform chi-squared tests and calculate Cramér's V for each specified column separately
+results_dm013 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm013", design), error = function(e) e)
+results_dm003 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm003", design), error = function(e) e)
+results_AgeCategory <- tryCatch(perform_chi_squared_test_and_cramers_v("AgeCategory", design), error = function(e) e)
+results_Education_level <- tryCatch(perform_chi_squared_test_and_cramers_v("Education_level", design), error = function(e) e)
+results_mpce_quintile <- tryCatch(perform_chi_squared_test_and_cramers_v("mpce_quintile.x", design), error = function(e) e)
+results_cv001_new <- tryCatch(perform_chi_squared_test_and_cramers_v("cv001_new", design), error = function(e) e)
+results_dm021 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm021", design), error = function(e) e)
+
+# Print results
+results_dm013
+results_dm003
+results_AgeCategory
+results_Education_level
+results_mpce_quintile
+results_cv001_new
+results_dm021
+
+
+
+# Function to create and analyze a contingency table based on highest count
+create_and_analyze_contingency_table <- function(variable, design) {
+  # Create the contingency table
+  table <- svytable(as.formula(paste("~ we412 +", variable)), design)
+  
+  # Print the table
+  print(paste("Contingency table for:", variable))
+  print(table)
+  
+  # Find the maximum count
+  max_count <- which(table == max(table), arr.ind = TRUE)
+  
+  # Print the strongest association based on count
+  strongest_association <- list(
+    row = rownames(table)[max_count[1]],
+    column = colnames(table)[max_count[2]],
+    count = max(table)
+  )
+  
+  print(paste("Strongest association for", variable, "is between",
+              strongest_association$row, "and", strongest_association$column,
+              "with count", strongest_association$count))
+  
+  return(list(table = table, strongest_association = strongest_association))
+}
+
+# Analyze each specified column
+result45 <- create_and_analyze_contingency_table("dm003", design)
+result46 <- create_and_analyze_contingency_table("AgeCategory", design)
+result47 <- create_and_analyze_contingency_table("Education_level", design)
+result47a <- create_and_analyze_contingency_table("mpce_quintile.x", design)
+
+
+# Print results
+result45
+result46
+result47
+result47a
+```
+
+
+```{r}
+# Data preprocessing (if not already done)
+final_data13 <- final_data %>%
+  mutate(
+    we412 = as.factor(we412),
+    dm003 = as.factor(dm003),
+    AgeCategory = as.factor(AgeCategory),
+    Education_level = as.factor(Education_level),
+    mpce_quintile.x = as.factor(mpce_quintile.x)
+  ) %>%
+  drop_na(we412, dm003, AgeCategory, Education_level, mpce_quintile.x)
+
+# Create survey design object
+design <- svydesign(ids = ~1, data = final_data13, weights = ~stateindividualweight)
+
+# Function to calculate Cramér's V for weighted data
+weighted_cramers_v <- function(var1, var2, design) {
+  # Create a formula for svytable
+  formula <- as.formula(paste("~", var1, "+", var2))
+  
+  # Create a weighted contingency table
+  tab <- svytable(formula, design)
+  
+  # Calculate chi-squared statistic manually
+  chi2 <- chisq.test(tab, correct = FALSE)$statistic
+  
+  # Extract the number of observations
+  n <- sum(weights(design))
+  
+  # Determine the number of levels in the smallest variable
+  k <- min(nlevels(final_data13[[var1]]), nlevels(final_data13[[var2]]))
+  
+  # Calculate Cramér's V
+  cramers_v <- sqrt(chi2 / (n * (k - 1)))
+  
+  return(cramers_v)
+}
+
+# Calculate Cramér's V for each pair of variables
+cramers_v47 <- weighted_cramers_v("we412", "dm003", design)
+cramers_v48 <- weighted_cramers_v("we412", "AgeCategory", design)
+cramers_v49 <- weighted_cramers_v("we412", "Education_level", design)
+cramers_v50 <- weighted_cramers_v("we412", "mpce_quintile.x", design)
+
+print(paste("Cramér's V47:", cramers_v47))
+print(paste("Cramér's V48:", cramers_v48))
+print(paste("Cramér's V49:", cramers_v49))
+print(paste("Cramér's V50:", cramers_v50))
+```
+
+
+
+**III. Financial Security - Wages/Salary**
+
+
+**CHI-SQUARE**
+```{r}
+# Data preprocessing
+labour_force2 <- labour_force %>%
+  mutate(
+    we014 = as.factor(we014),
+    dm013 = as.factor(dm013),
+    dm003 = as.factor(dm003),
+    AgeCategory = as.factor(AgeCategory),
+    Education_level = as.factor(Education_level),
+    mpce_quintile.x = as.factor(mpce_quintile.x),
+    cv001_new = as.factor(cv001_new),
+    dm021 = as.factor(dm021)
+  ) %>%
+  drop_na(we014, dm013, dm003, AgeCategory, Education_level, mpce_quintile.x, cv001_new, dm021)
+
+# Create a survey design object
+design <- svydesign(ids = ~1, data = labour_force2 , weights = ~stateindividualweight)
+
+# Function to perform chi-squared test and calculate Cramér's V
+perform_chi_squared_test_and_cramers_v <- function(variable, design) {
+  table <- svytable(as.formula(paste("~ we014 +", variable)), design)
+  
+  # Add small constant to avoid zero counts
+  table <- table + 1e-6
+  
+  if (length(unique(design$variables[[variable]])) > 1) {
+    chi_squared <- svychisq(as.formula(paste("~ we014 +", variable)), design)
+    
+    # Calculate Cramér's V
+    cramers_v <- sqrt(chi_squared$statistic / (sum(table) * (min(dim(table)) - 1)))
+    
+    return(list(chi_squared = chi_squared, cramers_v = cramers_v))
+  } else {
+    return("Not enough levels to perform chi-squared test")
+  }
+}
+
+# Perform chi-squared tests and calculate Cramér's V for each specified column separately
+results_dm013 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm013", design), error = function(e) e)
+results_dm003 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm003", design), error = function(e) e)
+results_AgeCategory <- tryCatch(perform_chi_squared_test_and_cramers_v("AgeCategory", design), error = function(e) e)
+results_Education_level <- tryCatch(perform_chi_squared_test_and_cramers_v("Education_level", design), error = function(e) e)
+results_mpce_quintile <- tryCatch(perform_chi_squared_test_and_cramers_v("mpce_quintile.x", design), error = function(e) e)
+results_cv001_new <- tryCatch(perform_chi_squared_test_and_cramers_v("cv001_new", design), error = function(e) e)
+results_dm021 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm021", design), error = function(e) e)
+
+# Print results
+results_dm013
+results_dm003
+results_AgeCategory
+results_Education_level
+results_mpce_quintile
+results_cv001_new
+results_dm021
+
+
+# Function to create and analyze a contingency table based on highest count
+create_and_analyze_contingency_table <- function(variable, design) {
+  # Create the contingency table
+  table <- svytable(as.formula(paste("~ we014 +", variable)), design)
+  
+  # Print the table
+  print(paste("Contingency table for:", variable))
+  print(table)
+  
+  # Find the maximum count
+  max_count <- which(table == max(table), arr.ind = TRUE)
+  
+  # Print the strongest association based on count
+  strongest_association <- list(
+    row = rownames(table)[max_count[1]],
+    column = colnames(table)[max_count[2]],
+    count = max(table)
+  )
+  
+  print(paste("Strongest association for", variable, "is between",
+              strongest_association$row, "and", strongest_association$column,
+              "with count", strongest_association$count))
+  
+  return(list(table = table, strongest_association = strongest_association))
+}
+
+# Analyze each specified column
+result48 <- create_and_analyze_contingency_table("AgeCategory", design)
+
+
+# Print results
+result48
+```
+
+
+```{r}
+# Data preprocessing (if not already done)
+labour_force2 <- labour_force %>%
+  mutate(
+    we014 = as.factor(we014),
+    AgeCategory = as.factor(AgeCategory)
+  ) %>%
+  drop_na(we014, AgeCategory)
+
+# Create survey design object
+design <- svydesign(ids = ~1, data = labour_force2, weights = ~stateindividualweight)
+
+# Function to calculate Cramér's V for weighted data
+weighted_cramers_v <- function(var1, var2, design) {
+  # Create a formula for svytable
+  formula <- as.formula(paste("~", var1, "+", var2))
+  
+  # Create a weighted contingency table
+  tab <- svytable(formula, design)
+  
+  # Calculate chi-squared statistic manually
+  chi2 <- chisq.test(tab, correct = FALSE)$statistic
+  
+  # Extract the number of observations
+  n <- sum(weights(design))
+  
+  # Determine the number of levels in the smallest variable
+  k <- min(nlevels(labour_force2[[var1]]), nlevels(labour_force2[[var2]]))
+  
+  # Calculate Cramér's V
+  cramers_v <- sqrt(chi2 / (n * (k - 1)))
+  
+  return(cramers_v)
+}
+
+# Calculate Cramér's V for each pair of variables
+cramers_v51 <- weighted_cramers_v("we014", "AgeCategory", design)
+
+
+print(paste("Cramér's V51:", cramers_v51))
+```
+
+
+
+
+**IV. Financial Security - Help from Family members**
+
+**CHI-SQUARE**
+```{r}
+# Data preprocessing
+current_scenario3 <- current_scenario %>%
+  mutate(
+    fs401 = as.factor(fs401),
+    dm013 = as.factor(dm013),
+    dm003 = as.factor(dm003),
+    AgeCategory = as.factor(AgeCategory),
+    Education_level = as.factor(Education_level),
+    mpce_quintile.x = as.factor(mpce_quintile.x),
+    cv001_new = as.factor(cv001_new),
+    dm021 = as.factor(dm021)
+  ) %>%
+  drop_na(fs401, dm013, dm003, AgeCategory, Education_level, mpce_quintile.x, cv001_new, dm021)
+
+# Create a survey design object
+design <- svydesign(ids = ~1, data = current_scenario3 , weights = ~stateindividualweight)
+
+perform_chi_squared_test <- function(variable, design) {
+  table <- svytable(as.formula(paste("~ fs401 +", variable)), design)
+  
+  # Add small constant to avoid zero counts
+  table <- table + 1e-6
+  
+  if (length(unique(design$variables[[variable]])) > 1) {
+    chi_squared <- svychisq(as.formula(paste("~ fs401 +", variable)), design)
+    return(chi_squared)
+  } else {
+    return("Not enough levels to perform chi-squared test")
+  }
+}
+
+# Perform chi-squared tests for each specified column separately
+chi_squared_dm013 <- tryCatch(perform_chi_squared_test("dm013", design), error = function(e) e)
+chi_squared_dm003 <- tryCatch(perform_chi_squared_test("dm003", design), error = function(e) e)
+chi_squared_AgeCategory <- tryCatch(perform_chi_squared_test("AgeCategory", design), error = function(e) e)
+chi_squared_Education_level <- tryCatch(perform_chi_squared_test("Education_level", design), error = function(e) e)
+chi_squared_mpce_quintile <- tryCatch(perform_chi_squared_test("mpce_quintile.x", design), error = function(e) e)
+chi_squared_cv001_new <- tryCatch(perform_chi_squared_test("cv001_new", design), error = function(e) e)
+chi_squared_dm021 <- tryCatch(perform_chi_squared_test("dm021", design), error = function(e) e)
+
+# Print results
+chi_squared_dm013
+chi_squared_dm003
+chi_squared_AgeCategory
+chi_squared_Education_level
+chi_squared_mpce_quintile
+chi_squared_cv001_new
+chi_squared_dm021
+
+
+# Function to create and analyze a contingency table
+create_and_analyze_contingency_table <- function(variable, design) {
+  # Create the contingency table
+  table <- svytable(as.formula(paste("~  fs401 +", variable)), design)
+  
+  # Print the table
+  print(paste("Contingency table for:", variable))
+  print(table)
+  
+  # Calculate row and column sums
+  row_sums <- apply(table, 1, sum)
+  col_sums <- apply(table, 2, sum)
+  
+  # Calculate expected frequencies
+  total <- sum(table)
+  expected <- outer(row_sums, col_sums) / total
+  
+  # Calculate the contribution to chi-squared statistic for each cell
+  contribution <- (table - expected)^2 / expected
+  
+  # Find the maximum contribution
+  max_contribution <- which(contribution == max(contribution), arr.ind = TRUE)
+  
+  # Print the strongest association
+  strongest_association <- list(
+    row = rownames(table)[max_contribution[1]],
+    column = colnames(table)[max_contribution[2]],
+    contribution = max(contribution)
+  )
+  
+  print(paste("Strongest association for", variable, "is between",
+              strongest_association$row, "and", strongest_association$column,
+              "with contribution", strongest_association$contribution))
+  
+  return(list(table = table, strongest_association = strongest_association))
+}
+
+# Analyze each specified column
+result49 <- create_and_analyze_contingency_table("Education_level", design)
+result50 <- create_and_analyze_contingency_table("cv001_new", design)
+result51 <- create_and_analyze_contingency_table("dm021", design)
+
+
+# Print results
+result49
+result50
+result51
+```
+
+
+
+**SOCIAL INSURANCE**
+
+```{r}
+current_scenario <- current_scenario %>%
+  mutate(social_insurance = case_when(
+    we316a == "1 Yes" | we316b == "1 Yes" | we316c == "1 Yes" | we316d == "1 Yes" | 
+    we316e == "1 Yes" | we316f == "1 Yes" | we316g == "1 Yes" | we316h == "1 Yes" | 
+    we316i == "1 Yes" ~ "Yes",
+    we316a == "2 No" & we316b == "2 No" & we316c == "2 No" & we316d == "2 No" & 
+    we316e == "2 No" & we316f == "2 No" & we316g == "2 No" & we316h == "2 No" & 
+    we316i == "2 No" ~ "No",
+    TRUE ~ NA_character_
+  ))
+```
+
+
+**CHI-SQUARE**
+```{r}
+# Data preprocessing
+current_scenario4 <- current_scenario %>%
+  mutate(
+    social_insurance = as.factor(social_insurance),
+    dm013 = as.factor(dm013),
+    dm003 = as.factor(dm003),
+    AgeCategory = as.factor(AgeCategory),
+    Education_level = as.factor(Education_level),
+    mpce_quintile.x = as.factor(mpce_quintile.x),
+    cv001_new = as.factor(cv001_new),
+    dm021 = as.factor(dm021)
+  ) %>%
+  drop_na(social_insurance, dm013, dm003, AgeCategory, Education_level, mpce_quintile.x, cv001_new, dm021)
+
+# Create a survey design object
+design <- svydesign(ids = ~1, data = current_scenario4 , weights = ~stateindividualweight)
+
+# Function to perform chi-squared test and calculate Cramér's V
+perform_chi_squared_test_and_cramers_v <- function(variable, design) {
+  table <- svytable(as.formula(paste("~ social_insurance +", variable)), design)
+  
+  # Add small constant to avoid zero counts
+  table <- table + 1e-6
+  
+  if (length(unique(design$variables[[variable]])) > 1) {
+    chi_squared <- svychisq(as.formula(paste("~ social_insurance +", variable)), design)
+    
+    # Calculate Cramér's V
+    cramers_v <- sqrt(chi_squared$statistic / (sum(table) * (min(dim(table)) - 1)))
+    
+    return(list(chi_squared = chi_squared, cramers_v = cramers_v))
+  } else {
+    return("Not enough levels to perform chi-squared test")
+  }
+}
+
+# Perform chi-squared tests and calculate Cramér's V for each specified column separately
+results_dm013 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm013", design), error = function(e) e)
+results_dm003 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm003", design), error = function(e) e)
+results_AgeCategory <- tryCatch(perform_chi_squared_test_and_cramers_v("AgeCategory", design), error = function(e) e)
+results_Education_level <- tryCatch(perform_chi_squared_test_and_cramers_v("Education_level", design), error = function(e) e)
+results_mpce_quintile <- tryCatch(perform_chi_squared_test_and_cramers_v("mpce_quintile.x", design), error = function(e) e)
+results_cv001_new <- tryCatch(perform_chi_squared_test_and_cramers_v("cv001_new", design), error = function(e) e)
+results_dm021 <- tryCatch(perform_chi_squared_test_and_cramers_v("dm021", design), error = function(e) e)
+
+# Print results
+results_dm013
+results_dm003
+results_AgeCategory
+results_Education_level
+results_mpce_quintile
+results_cv001_new
+results_dm021
+
+
+# Function to create and analyze a contingency table based on highest count
+create_and_analyze_contingency_table <- function(variable, design) {
+  # Create the contingency table
+  table <- svytable(as.formula(paste("~ social_insurance +", variable)), design)
+  
+  # Print the table
+  print(paste("Contingency table for:", variable))
+  print(table)
+  
+  # Find the maximum count
+  max_count <- which(table == max(table), arr.ind = TRUE)
+  
+  # Print the strongest association based on count
+  strongest_association <- list(
+    row = rownames(table)[max_count[1]],
+    column = colnames(table)[max_count[2]],
+    count = max(table)
+  )
+  
+  print(paste("Strongest association for", variable, "is between",
+              strongest_association$row, "and", strongest_association$column,
+              "with count", strongest_association$count))
+  
+  return(list(table = table, strongest_association = strongest_association))
+}
+
+# Analyze each specified column
+result52 <- create_and_analyze_contingency_table("dm013", design)
+result53 <- create_and_analyze_contingency_table("AgeCategory", design)
+result54 <- create_and_analyze_contingency_table("Education_level", design)
+result55 <- create_and_analyze_contingency_table("mpce_quintile.x", design)
+
+
+# Print results
+result52
+result53
+result54
+result55
+```
+
+
+
+```{r}
+# Data preprocessing (if not already done)
+current_scenario15 <- current_scenario %>%
+  mutate(
+    social_insurance = as.factor(social_insurance),
+    dm013 = as.factor(dm013),
+    AgeCategory = as.factor(AgeCategory),
+    Education_level = as.factor(Education_level),
+    mpce_quintile.x = as.factor(mpce_quintile.x)
+  ) %>%
+  drop_na(social_insurance, dm013, AgeCategory, Education_level, mpce_quintile.x)
+
+# Create survey design object
+design <- svydesign(ids = ~1, data = current_scenario15, weights = ~stateindividualweight)
+
+# Function to calculate Cramér's V for weighted data
+weighted_cramers_v <- function(var1, var2, design) {
+  # Create a formula for svytable
+  formula <- as.formula(paste("~", var1, "+", var2))
+  
+  # Create a weighted contingency table
+  tab <- svytable(formula, design)
+  
+  # Calculate chi-squared statistic manually
+  chi2 <- chisq.test(tab, correct = FALSE)$statistic
+  
+  # Extract the number of observations
+  n <- sum(weights(design))
+  
+  # Determine the number of levels in the smallest variable
+  k <- min(nlevels(current_scenario15[[var1]]), nlevels(current_scenario15[[var2]]))
+  
+  # Calculate Cramér's V
+  cramers_v <- sqrt(chi2 / (n * (k - 1)))
+  
+  return(cramers_v)
+}
+
+# Calculate Cramér's V for each pair of variables
+cramers_v52 <- weighted_cramers_v("social_insurance", "dm013", design)
+cramers_v53 <- weighted_cramers_v("social_insurance", "AgeCategory", design)
+cramers_v54 <- weighted_cramers_v("social_insurance", "Education_level", design)
+cramers_v55 <- weighted_cramers_v("social_insurance", "mpce_quintile.x", design)
+
+print(paste("Cramér's V52:", cramers_v52))
+print(paste("Cramér's V53:", cramers_v53))
+print(paste("Cramér's V54:", cramers_v54))
+print(paste("Cramér's V55:", cramers_v55))
+```

@@ -1,0 +1,191 @@
+---
+title: "Financial Support"
+author: "Mizza"
+date: "2024-06-14"
+output: html_document
+---
+
+
+**I. RECEIVE HELP**
+
+```{r}
+count_fs401 <- sum(!is.na(final_data$fs401))
+
+# Print the result
+print(count_fs401)
+
+# Create the frequency distribution table
+frequency1 <- table(final_data$fs401)
+print(frequency1)
+
+# Proportion table
+proportion_table1 <- prop.table(frequency1) * 100  
+print(round(proportion_table1, digits=2))
+
+# Define the survey design
+design1 <- svydesign(id = ~1, weights = ~stateindividualweight, data = final_data)
+
+# Create a weighted frequency distribution table
+svytable_design1 <- svytable(~fs401, design = design1)
+print(svytable_design1)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table1 <- prop.table(svytable_design1) * 100  
+print(round(weighted_proportion_table1, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df1 <- as.data.frame(weighted_proportion_table1)
+```
+
+
+**1. Help from whom**
+
+```{r}
+help<- final_data%>%
+  filter(fs401 == "1 Yes")
+```
+
+```{r}
+fam_help <- help%>%
+  filter(fs402s1 == "1 Yes"| fs402s2 == "1 Yes"| fs402s3 == "1 Yes"| fs402s4 == "1 Yes"| fs402s5 == "1 Yes"| fs402s6 == "1 Yes"| fs402s7 == "1 Yes"| fs402s8 == "1 Yes"| fs402s9 == "1 Yes"| fs402s10 == "1 Yes"| fs402s11 == "1 Yes"| fs402s12 == "1 Yes")
+```
+
+```{r}
+frnd_help <- help%>%
+  filter(fs402s13 == "1 Yes")
+```
+
+```{r}
+fam_freq1 <- help %>%
+  filter(fs402s1 == "1 Yes"| fs402s2 == "1 Yes"| fs402s3 == "1 Yes"| fs402s4 == "1 Yes"| fs402s5 == "1 Yes"| fs402s6 == "1 Yes"| fs402s7 == "1 Yes"| fs402s8 == "1 Yes"| fs402s9 == "1 Yes"| fs402s10 == "1 Yes"| fs402s11 == "1 Yes"| fs402s12 == "1 Yes") %>%
+  summarise(freq_yes1 = n())
+
+frnds_freq1 <- help %>%
+  filter(fs402s13 == "1 Yes") %>%
+  summarise(freq_no1 = n())
+
+# Print the results
+cat("Frequency 'fam':", fam_freq1$freq_yes1, "\n")
+cat("Frequency 'frnds':", frnds_freq1$freq_no1, "\n")
+
+# Calculate the frequency of "1 Yes" in any of the specified columns
+yes_frequency1 <- help %>%
+  filter(fs402s1 == "1 Yes"| fs402s2 == "1 Yes"| fs402s3 == "1 Yes"| fs402s4 == "1 Yes"| fs402s5 == "1 Yes"| fs402s6 == "1 Yes"| fs402s7 == "1 Yes"| fs402s8 == "1 Yes"| fs402s9 == "1 Yes"| fs402s10 == "1 Yes"| fs402s11 == "1 Yes"| fs402s12 == "1 Yes") %>%
+  summarise(freq_yes1 = sum(stateindividualweight))
+
+# Calculate the frequency of "2 No" in all of the specified columns
+no_frequency1 <- help %>%
+  filter(fs402s13 == "1 Yes") %>%
+  summarise(freq_no1 = sum(stateindividualweight))
+
+# Combine the frequencies and calculate the proportions
+total_responses1 <- sum(help$stateindividualweight)
+yes_proportion1 <- (yes_frequency1$freq_yes1 / total_responses1)*100
+no_proportion1 <- (no_frequency1$freq_no1 / total_responses1)*100
+
+# Create a data frame with the results
+results1 <- data.frame(
+  Response = c("1 Yes_fam", "1 Yes_frnds", "NA"),
+  Weighted_Proportion = c(yes_proportion1, no_proportion1, 100 - (yes_proportion1 + no_proportion1))
+)
+
+# Print the results
+print(results1)
+
+```
+
+```{r}
+# Create the frequency distribution table
+frequency1a <- table(final_data$fs402)
+print(frequency1a)
+```
+
+
+**I. PROVIDE HELP**
+
+```{r}
+# Create the frequency distribution table
+frequency2 <- table(final_data$fs404)
+print(frequency2)
+
+# Proportion table
+proportion_table2 <- prop.table(frequency2) * 100  
+print(round(proportion_table2, digits=2))
+
+# Define the survey design
+design2 <- svydesign(id = ~1, weights = ~stateindividualweight, data = final_data)
+
+# Create a weighted frequency distribution table
+svytable_design2 <- svytable(~fs404, design = design2)
+print(svytable_design2)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table2 <- prop.table(svytable_design2) * 100  
+print(round(weighted_proportion_table2, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df2 <- as.data.frame(weighted_proportion_table2)
+```
+
+
+**1. Help to whom**
+
+```{r}
+help_provide<- final_data%>%
+  filter(fs404 == "1 Yes")
+```
+
+```{r}
+fam_help <- help_provide%>%
+  filter(fs405s1 == "1 Yes"| fs405s2 == "1 Yes"| fs405s3 == "1 Yes"| fs405s4 == "1 Yes"| fs405s5 == "1 Yes"| fs405s6 == "1 Yes"| fs405s7 == "1 Yes"| fs405s8 == "1 Yes"| fs405s9 == "1 Yes"| fs405s10 == "1 Yes"| fs405s11 == "1 Yes"| fs405s12 == "1 Yes")
+```
+
+```{r}
+frnd_help <- help_provide%>%
+  filter(fs405s14 == "1 Yes")
+```
+
+```{r}
+
+# Calculate the frequency of "1 Yes" in any of the specified columns
+fam_freq1a <- help_provide %>%
+  filter(fs405s1 == "1 Yes"| fs405s2 == "1 Yes"| fs405s3 == "1 Yes"| fs405s4 == "1 Yes"| fs405s5 == "1 Yes"| fs405s6 == "1 Yes"| fs405s7 == "1 Yes"| fs405s8 == "1 Yes"| fs405s9 == "1 Yes"| fs405s10 == "1 Yes"| fs405s11 == "1 Yes"| fs405s12 == "1 Yes") %>%
+  summarise(freq_yes1a = n())
+
+# Calculate the frequency of "2 No" in all of the specified columns
+frnds_freq1a <- help_provide %>%
+  filter(fs405s14 == "1 Yes") %>%
+  summarise(freq_no1a = n())
+
+# Print the results
+cat("Frequency 'fam':", fam_freq1a$freq_yes1a, "\n")
+cat("Frequency 'frnds':", frnds_freq1a$freq_no1a, "\n")
+
+# Calculate the frequency of "1 Yes" in any of the specified columns
+yes_frequency1a <- help_provide %>%
+  filter(fs405s1 == "1 Yes"| fs405s2 == "1 Yes"| fs405s3 == "1 Yes"| fs405s4 == "1 Yes"| fs405s5 == "1 Yes"| fs405s6 == "1 Yes"| fs405s7 == "1 Yes"| fs405s8 == "1 Yes"| fs405s9 == "1 Yes"| fs405s10 == "1 Yes"| fs405s11 == "1 Yes"| fs405s12 == "1 Yes") %>%
+  summarise(freq_yes1a = sum(stateindividualweight))
+
+# Calculate the frequency of "2 No" in all of the specified columns
+no_frequency1a <- help_provide %>%
+  filter(fs405s14 == "1 Yes") %>%
+  summarise(freq_no1a = sum(stateindividualweight))
+
+# Combine the frequencies and calculate the proportions
+total_responses1a <- sum(help_provide$stateindividualweight)
+yes_proportion1a <- (yes_frequency1a$freq_yes1a / total_responses1a)*100
+no_proportion1a <- (no_frequency1a$freq_no1a / total_responses1a)*100
+
+# Create a data frame with the results
+results1a <- data.frame(
+  Response = c("1 Yes_fam", "1 Yes_frnds", "NA"),
+  Weighted_Proportion = c(yes_proportion1a, no_proportion1a, 100 - (yes_proportion1a + no_proportion1a))
+)
+
+# Print the results
+print(results1a)
+
+```
+
+
+

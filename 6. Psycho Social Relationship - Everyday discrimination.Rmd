@@ -1,0 +1,271 @@
+---
+title: "Psycho Social Measures - Everyday discrimination"
+author: "Mizza"
+date: "2024-06-14"
+output: html_document
+---
+
+```{r}
+#| label: setup
+#| warning: false
+#| echo: false
+
+library(ggplot2)
+library(readxl)
+library(dplyr)
+library(tidyverse)
+library(tidyr)
+library(survey)
+library(ggsankey)
+
+Household <- read_excel("C:/Users/mizza/OneDrive/Desktop/CMD/2. LASI/2_LASI_W1_Household_v4 1.xlsx")
+Individual <- read_excel("C:/Users/mizza/OneDrive/Desktop/CMD/2. LASI/3_LASI_W1_Individual_data 1.xlsx")
+merged_data <- merge (Individual, Household, by = "hhid", all = TRUE)
+roster <- read_excel ("C:/Users/mizza/OneDrive/Desktop/CMD/2. LASI/1_LASI_W1_HH_roster 1.xlsx")
+final_data <- merge (merged_data, roster, by = "hhid", all = TRUE)
+```
+
+
+**DATA OF VULNERABLE GROUP - SENIOR CITIZENS**
+
+```{r}
+final_data <- final_data%>%
+  rename(Age = dm005)
+```
+
+```{r}
+
+##TO APPLY AGE FILTER##
+create_age_category <- function(Age) {
+  if (is.na(Age)) {
+    return(NA)
+  }
+  
+  if (Age >= 60 & Age <= 69) {
+    return("Young Old")
+  } else if (Age >= 70 & Age <= 79) {
+    return("Old")
+  } else if (Age >= 80) {
+    return("Very Old")
+  } else {
+    return(NA) 
+  }
+}
+final_data$AgeCategory <- sapply(final_data$Age, create_age_category)
+
+final_data <- final_data[final_data$AgeCategory %in% c("Young Old", "Old", "Very Old"), ]
+```
+
+
+**EDUCATION BUCKET**
+
+```{r}
+final_data <- final_data %>%
+  mutate(Education_level = case_when(
+    dm006 == "2 No" ~ "Uneducated",
+    dm008 %in% c("1 Less than Primary (Standard 1-4)", 
+                 "2 Primary Completed (Standard 5-7)", 
+                 "3 Middle Completed (Standard 8- 9)") ~ "Primary School",
+    dm008 == "4 Secondary School/Matriculation completed" ~ "Secondary School",
+    dm008 %in% c("5 Higher Secondary/Intermediate/Senior Secondary completed", 
+                 "6 Diploma and certificate holders") ~ "Senior Secondary School",
+    dm008 %in% c("7 Graduate degree (B.A., B.Sc., B. Com.) completed", 
+                 "8 Post-graduate degree or (M.A., M.Sc., M. Com.) above (M.Phil, Ph.D., Post-Doc) completed", 
+                 "9 Professional course/degree (B.Ed, BE, B.Tech, MBBS, BHMS, BAMS, B.Pharm, BCS, BCA, BBA, LLB, BVSc., B. Arch, M.Ed, ME, M.Tech, MD, M.Pharm, MCS, MCA, MBA,LLM, MVSc., M. Arch, MS, CA, CS, CWA)Completed") ~ "Tertiary Education",
+    TRUE ~ "Other"
+  ))
+```
+
+
+
+
+**EVERYDAY DISCRIMINATION**
+
+```{r}
+# Using dplyr to create the new column with the total score
+final_data <- final_data %>%
+  mutate(Everyday_discrimination_INDEX = rowSums(across(c("fs521","fs522","fs523","fs523", "fs524", "fs525", "fs526"),
+                                                        ~ ifelse(. == "6 Never", 0,
+                                                                 ifelse(. == "1 Almost every day", 5,
+                                                                        ifelse(. == "2 At least once a week", 4,
+                                                                               ifelse(. == "3 A few times a month", 3,
+                                                                                      ifelse(. == "4 A few times a year", 2,
+                                                                                             ifelse(. == "5 Less than once a year", 1, NA)))))))))                                                                         
+                                                      
+
+# Define the survey design
+design <- svydesign(id = ~1, weights = ~stateindividualweight, data = final_data)
+
+# Corrected variable name usage
+Everyday_discrimination_INDEX_vars <- c("Everyday_discrimination_INDEX") # This should match the column name created in mutate
+
+# Initialize an empty list to store the proportion tables
+proportion_tables <- list()
+
+# Generate and store the proportion table for each variable
+for (var_name in Everyday_discrimination_INDEX_vars) {
+  # Construct the formula directly using the variable name
+  var_formula <- as.formula(paste0("~", var_name))
+  
+  # Use the formula in svytable to get the frequency table
+  freq_table <- svytable(var_formula, design = design)
+  
+  # Convert the frequency table to proportions and store it in the list
+  proportion_tables[[paste0(var_name, "_proportions")]] <- freq_table / sum(freq_table)
+}
+
+# Combine the proportion tables into a single table
+combined_proportion_table_Everyday_discrimination_INDEX <- do.call(rbind, lapply(proportion_tables, function(table) {
+  # Add a column for the variable name
+  table$Variable <- rep(names(proportion_tables), each = nrow(table) / length(proportion_tables))
+  return(table)
+}))
+
+# Print the combined proportion table
+print(combined_proportion_table_Everyday_discrimination_INDEX)
+                                                  
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df <- as.data.frame(combined_proportion_table_Everyday_discrimination_INDEX)                                      
+```
+
+
+**Reasons**
+
+```{r}
+reason_dis<- final_data%>%
+  filter(fs521 != "6 Never" | fs522 != "6 Never" |fs523 != "6 Never" |fs524 != "6 Never" |fs525 != "6 Never" | fs526 != "6 Never")
+```
+
+```{r}
+reason_disy<- final_data%>%
+  filter(fs521 == "6 Never" | fs522 == "6 Never" |fs523 == "6 Never" |fs524 == "6 Never" |fs525 == "6 Never" | fs526 == "6 Never")
+```
+
+*Age*
+```{r}
+# Create the frequency distribution table
+frequency1 <- table(reason_dis$fs527s1)
+print(frequency1)
+
+# Proportion table
+proportion_table1 <- prop.table(frequency1) * 100  
+print(round(proportion_table1, digits=2))
+
+# Define the survey design
+design1 <- svydesign(id = ~1, weights = ~stateindividualweight, data = reason_dis)
+
+# Create a weighted frequency distribution table
+svytable_design1 <- svytable(~fs527s1, design = design1)
+print(svytable_design1)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table1 <- prop.table(svytable_design1) * 100  
+print(round(weighted_proportion_table1, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df1 <- as.data.frame(weighted_proportion_table1)
+```
+
+*Gender*
+```{r}
+# Create the frequency distribution table
+frequency2 <- table(reason_dis$fs527s2)
+print(frequency2)
+
+# Proportion table
+proportion_table2 <- prop.table(frequency2) * 100  
+print(round(proportion_table2, digits=2))
+
+# Define the survey design
+design2 <- svydesign(id = ~1, weights = ~stateindividualweight, data = reason_dis)
+
+# Create a weighted frequency distribution table
+svytable_design2 <- svytable(~fs527s2, design = design2)
+print(svytable_design2)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table2 <- prop.table(svytable_design2) * 100  
+print(round(weighted_proportion_table2, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df2 <- as.data.frame(weighted_proportion_table2)
+```
+
+*Caste*
+```{r}
+# Create the frequency distribution table
+frequency4 <- table(reason_dis$fs527s4)
+print(frequency4)
+
+# Proportion table
+proportion_table4 <- prop.table(frequency4) * 100  
+print(round(proportion_table4, digits=2))
+
+# Define the survey design
+design4 <- svydesign(id = ~1, weights = ~stateindividualweight, data = reason_dis)
+
+# Create a weighted frequency distribution table
+svytable_design4 <- svytable(~fs527s4, design = design4)
+print(svytable_design4)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table4 <- prop.table(svytable_design4) * 100  
+print(round(weighted_proportion_table4, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df4 <- as.data.frame(weighted_proportion_table4)
+```
+
+*Physical Disability*
+```{r}
+# Create the frequency distribution table
+frequency6 <- table(reason_dis$fs527s6)
+print(frequency6)
+
+# Proportion table
+proportion_table6 <- prop.table(frequency6) * 100  
+print(round(proportion_table6, digits=2))
+
+# Define the survey design
+design6 <- svydesign(id = ~1, weights = ~stateindividualweight, data = reason_dis)
+
+# Create a weighted frequency distribution table
+svytable_design6 <- svytable(~fs527s6, design = design6)
+print(svytable_design6)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table6 <- prop.table(svytable_design6) * 100  
+print(round(weighted_proportion_table6, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df6 <- as.data.frame(weighted_proportion_table6)
+```
+
+*Financial Status*
+```{r}
+# Create the frequency distribution table
+frequency8 <- table(reason_dis$fs527s8)
+print(frequency8)
+
+# Proportion table
+proportion_table8 <- prop.table(frequency8) * 100  
+print(round(proportion_table8, digits=2))
+
+# Define the survey design
+design8 <- svydesign(id = ~1, weights = ~stateindividualweight, data = reason_dis)
+
+# Create a weighted frequency distribution table
+svytable_design8 <- svytable(~fs527s8, design = design8)
+print(svytable_design1)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table8 <- prop.table(svytable_design8) * 100  
+print(round(weighted_proportion_table8, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df8 <- as.data.frame(weighted_proportion_table8)
+```
+
+
+
+

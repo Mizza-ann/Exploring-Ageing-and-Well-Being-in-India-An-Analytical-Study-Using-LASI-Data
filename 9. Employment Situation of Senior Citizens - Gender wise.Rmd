@@ -1,0 +1,725 @@
+---
+title: "Employment Situation of Senior Citizens - Gender wise"
+author: "Mizza"
+date: "2024-06-24"
+output: html_document
+---
+
+```{r}
+#| label: setup
+#| warning: false
+#| echo: false
+
+library(ggplot2)
+library(readxl)
+library(dplyr)
+library(tidyverse)
+library(tidyr)
+library(survey)
+library(ggsankey)
+
+Household <- read_excel("C:/Users/mizza/OneDrive/Desktop/CMD/2. LASI/2_LASI_W1_Household_v4 1.xlsx")
+Individual <- read_excel("C:/Users/mizza/OneDrive/Desktop/CMD/2. LASI/3_LASI_W1_Individual_data 1.xlsx")
+merged_data <- merge (Individual, Household, by = "hhid", all = TRUE)
+roster <- read_excel ("C:/Users/mizza/OneDrive/Desktop/CMD/2. LASI/1_LASI_W1_HH_roster 1.xlsx")
+final_data <- merge (merged_data, roster, by = "hhid", all = TRUE)
+```
+
+
+**DATA OF VULNERABLE GROUP - SENIOR CITIZENS**
+
+```{r}
+final_data <- final_data%>%
+  rename(Age = dm005)
+```
+
+```{r}
+
+##TO APPLY AGE FILTER##
+create_age_category <- function(Age) {
+  if (is.na(Age)) {
+    return(NA)
+  }
+  
+  if (Age >= 60 & Age <= 69) {
+    return("Young Old")
+  } else if (Age >= 70 & Age <= 79) {
+    return("Old")
+  } else if (Age >= 80) {
+    return("Very Old")
+  } else {
+    return(NA) 
+  }
+}
+final_data$AgeCategory <- sapply(final_data$Age, create_age_category)
+
+final_data <- final_data[final_data$AgeCategory %in% c("Young Old", "Old", "Very Old"), ]
+```
+
+**EDUCATION BUCKET**
+
+```{r}
+final_data <- final_data %>%
+  mutate(Education_level = case_when(
+    dm006 == "2 No" ~ "Uneducated",
+    dm008 %in% c("1 Less than Primary (Standard 1-4)", 
+                 "2 Primary Completed (Standard 5-7)", 
+                 "3 Middle Completed (Standard 8- 9)") ~ "Primary School",
+    dm008 == "4 Secondary School/Matriculation completed" ~ "Secondary School",
+    dm008 %in% c("5 Higher Secondary/Intermediate/Senior Secondary completed", 
+                 "6 Diploma and certificate holders") ~ "Senior Secondary School",
+    dm008 %in% c("7 Graduate degree (B.A., B.Sc., B. Com.) completed", 
+                 "8 Post-graduate degree or (M.A., M.Sc., M. Com.) above (M.Phil, Ph.D., Post-Doc) completed", 
+                 "9 Professional course/degree (B.Ed, BE, B.Tech, MBBS, BHMS, BAMS, B.Pharm, BCS, BCA, BBA, LLB, BVSc., B. Arch, M.Ed, ME, M.Tech, MD, M.Pharm, MCS, MCA, MBA,LLM, MVSc., M. Arch, MS, CA, CS, CWA)Completed") ~ "Tertiary Education",
+    TRUE ~ "Other"
+  ))
+```
+
+```{r}
+final_data <- final_data %>%
+  rename(Gender = dm003)
+```
+
+
+
+**CURRENT EMPLOYMENT SCENARIO**
+
+```{r}
+final_data<-final_data%>%
+  rename(Employed = we004)
+```
+
+```{r}
+
+# Replace NA values in the Employed column with "Never worked"
+final_data$Employed[is.na(final_data$Employed)] <- "Never worked"
+
+
+# Create the frequency distribution table
+frequency5 <- table(final_data$Employed)
+print(frequency5)
+ 
+# Define the survey design
+design5 <- svydesign(id = ~1, weights = ~stateindividualweight, data = final_data)
+
+# Create a weighted frequency distribution table
+svytable_design5 <- svytable(~Employed, design = design5)
+print(svytable_design5)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table5 <- prop.table(svytable_design5) * 100  
+print(round(weighted_proportion_table5, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df5 <- as.data.frame(weighted_proportion_table5)
+```
+
+
+*A.Gender Analysis*
+```{r}
+final_data<- final_data%>%
+  rename(Employed_3_months = we001)
+```
+
+
+*(i) Male*
+
+```{r}
+male<- final_data%>%
+  filter(Gender == "1 Male")
+```
+
+```{r}
+# Create the frequency distribution table
+frequency1 <- table(male$Employed)
+print(frequency1)
+
+# Define the survey design
+design1 <- svydesign(id = ~1, weights = ~stateindividualweight, data = male)
+
+# Create a weighted frequency distribution table
+svytable_design1 <- svytable(~Employed, design = design1)
+print(svytable_design1)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table1 <- prop.table(svytable_design1) * 100  
+print(round(weighted_proportion_table1, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df1 <- as.data.frame(weighted_proportion_table1)
+
+```
+
+
+
+*(ii) Female*
+
+```{r}
+female<- final_data%>%
+  filter(Gender == "2 Female")
+```
+
+```{r}
+# Create the frequency distribution table
+frequency14 <- table(female$Employed)
+print(frequency14)
+
+# Define the survey design
+design14 <- svydesign(id = ~1, weights = ~stateindividualweight, data = female)
+
+# Create a weighted frequency distribution table
+svytable_design14 <- svytable(~Employed, design = design14)
+print(svytable_design14)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table14 <- prop.table(svytable_design14) * 100  
+print(round(weighted_proportion_table14, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df14 <- as.data.frame(weighted_proportion_table14)
+
+```
+
+
+
+**II.1. CURRENTLY NOT WORKING - Reason**
+
+*(i) Male*
+
+```{r}
+currently_not_working_male<- male%>%
+  filter(Employed == "2 No")
+```
+
+```{r}
+currently_not_working_male <- currently_not_working_male %>%
+  rename(Reason_current_not_working = we005)
+```
+
+*Counting NA data*
+```{r}
+# Assuming final_data_No_temp is your dataset
+num_NA_job_search2 <- sum(is.na(currently_not_working_male$Reason_current_not_working))
+
+# Print the result
+print(num_NA_job_search2)
+```
+
+```{r}
+# Create the frequency distribution table
+frequency5 <- table(currently_not_working_male$Reason_current_not_working)
+print(frequency5)
+
+# Proportion table
+proportion_table5 <- prop.table(frequency5) * 100 
+print(round(proportion_table5, digits=2))
+
+# Define the survey design
+design5 <- svydesign(id = ~1, weights = ~stateindividualweight, data = currently_not_working_male)
+
+# Create a weighted frequency distribution table
+svytable_design5 <- svytable(~Reason_current_not_working, design = design5)
+print(svytable_design5)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table5 <- prop.table(svytable_design5) * 100  
+print(round(weighted_proportion_table5, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df5 <- as.data.frame(weighted_proportion_table5)
+
+```
+
+
+
+*(ii) Female*
+
+```{r}
+currently_not_working_female<- female%>%
+  filter(Employed == "2 No")
+```
+
+```{r}
+currently_not_working_female <- currently_not_working_female %>%
+  rename(Reason_current_not_working = we005)
+```
+
+*Counting NA data*
+```{r}
+# Assuming final_data_No_temp is your dataset
+num_NA_job_search2 <- sum(is.na(currently_not_working_female$Reason_current_not_working))
+
+# Print the result
+print(num_NA_job_search2)
+```
+
+```{r}
+# Create the frequency distribution table
+frequency5a <- table(currently_not_working_female$Reason_current_not_working)
+print(frequency5a)
+
+# Define the survey design
+design5a <- svydesign(id = ~1, weights = ~stateindividualweight, data = currently_not_working_female)
+
+# Create a weighted frequency distribution table
+svytable_design5a <- svytable(~Reason_current_not_working, design = design5a)
+print(svytable_design5a)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table5a <- prop.table(svytable_design5a) * 100  
+print(round(weighted_proportion_table5a, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df5a <- as.data.frame(weighted_proportion_table5a)
+```
+
+
+**III.1. CURRENTLY WORKING - Occupation**
+
+*(i) Male*
+
+```{r}
+labour_force_male<- male%>%
+  filter(Employed == "1 Yes")
+```
+
+```{r}
+labour_force_male <- labour_force_male %>%
+  rename(Occupation = we027)
+```
+
+*Counting NA data*
+```{r}
+# Assuming final_data_No_temp is your dataset
+num_NA_job_search2 <- sum(is.na(labour_force_male$Occupation))
+
+# Print the result
+print(num_NA_job_search2)
+```
+
+```{r}
+labour_force_male$Occupation <- ifelse(labour_force_male$Occupation == "9", "9 Elementary occupations", labour_force_male$Occupation)
+labour_force_male$Occupation <- ifelse(labour_force_male$Occupation == "4", "4 Clerks", labour_force_male$Occupation)
+labour_force_male$Occupation <- ifelse(labour_force_male$Occupation == "5", "5 Service workers and shop and market sales workers", labour_force_male$Occupation)
+labour_force_male$Occupation <- ifelse(labour_force_male$Occupation == "6", "6 Skilled agricultural and fishery workers", labour_force_male$Occupation)
+labour_force_male$Occupation <- ifelse(labour_force_male$Occupation == "7", "7 Craft and related trade workers", labour_force_male$Occupation)
+labour_force_male$Occupation <- ifelse(labour_force_male$Occupation == "8", "8 Plant and machine operators and assemblers", labour_force_male$Occupation)
+labour_force_male$Occupation <- ifelse(labour_force_male$Occupation == "10", "10 Workers not classified anywhere", labour_force_male$Occupation)
+labour_force_male$Occupation <- ifelse(labour_force_male$Occupation == "11", "11 Other", labour_force_male$Occupation)
+```
+
+```{r}
+# Create the frequency distribution table
+frequency6 <- table(labour_force_male$Occupation)
+print(frequency6)
+
+# Define the survey design
+design6 <- svydesign(id = ~1, weights = ~stateindividualweight, data = labour_force_male)
+
+# Create a weighted frequency distribution table
+svytable_design6 <- svytable(~Occupation, design = design6)
+print(svytable_design6)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table6 <- prop.table(svytable_design6) * 100  
+print(round(weighted_proportion_table6, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df6 <- as.data.frame(weighted_proportion_table6)
+```
+
+
+
+*(ii) Female*
+
+```{r}
+currently_not_working_female<- female%>%
+  filter(Employed == "2 No")
+```
+
+```{r}
+currently_not_working_female <- currently_not_working_female %>%
+  rename(Reason_current_not_working = we005)
+```
+
+*Counting NA data*
+```{r}
+# Assuming final_data_No_temp is your dataset
+num_NA_job_search2 <- sum(is.na(currently_not_working_female$Reason_current_not_working))
+
+# Print the result
+print(num_NA_job_search2)
+```
+
+```{r}
+# Create the frequency distribution table
+frequency5a <- table(currently_not_working_female$Reason_current_not_working)
+print(frequency5a)
+
+# Define the survey design
+design5a <- svydesign(id = ~1, weights = ~stateindividualweight, data = currently_not_working_female)
+
+# Create a weighted frequency distribution table
+svytable_design5a <- svytable(~Reason_current_not_working, design = design5a)
+print(svytable_design5a)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table5a <- prop.table(svytable_design5a) * 100  
+print(round(weighted_proportion_table5a, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df5a <- as.data.frame(weighted_proportion_table5a)
+```
+
+
+
+*(i) Male*
+
+```{r}
+labour_force_male<- male%>%
+  filter(Employed == "1 Yes")
+```
+
+```{r}
+labour_force_male <- labour_force_male %>%
+  rename(Occupation = we027)
+```
+
+*Counting NA data*
+```{r}
+# Assuming final_data_No_temp is your dataset
+num_NA_job_search2 <- sum(is.na(labour_force_male$Occupation))
+
+# Print the result
+print(num_NA_job_search2)
+```
+
+```{r}
+labour_force_male$Occupation <- ifelse(labour_force_male$Occupation == "9", "9 Elementary occupations", labour_force_male$Occupation)
+labour_force_male$Occupation <- ifelse(labour_force_male$Occupation == "4", "4 Clerks", labour_force_male$Occupation)
+labour_force_male$Occupation <- ifelse(labour_force_male$Occupation == "5", "5 Service workers and shop and market sales workers", labour_force_male$Occupation)
+labour_force_male$Occupation <- ifelse(labour_force_male$Occupation == "6", "6 Skilled agricultural and fishery workers", labour_force_male$Occupation)
+labour_force_male$Occupation <- ifelse(labour_force_male$Occupation == "7", "7 Craft and related trade workers", labour_force_male$Occupation)
+labour_force_male$Occupation <- ifelse(labour_force_male$Occupation == "8", "8 Plant and machine operators and assemblers", labour_force_male$Occupation)
+labour_force_male$Occupation <- ifelse(labour_force_male$Occupation == "10", "10 Workers not classified anywhere", labour_force_male$Occupation)
+labour_force_male$Occupation <- ifelse(labour_force_male$Occupation == "11", "11 Other", labour_force_male$Occupation)
+```
+
+```{r}
+# Create the frequency distribution table
+frequency6 <- table(labour_force_male$Occupation)
+print(frequency6)
+
+# Define the survey design
+design6 <- svydesign(id = ~1, weights = ~stateindividualweight, data = labour_force_male)
+
+# Create a weighted frequency distribution table
+svytable_design6 <- svytable(~Occupation, design = design6)
+print(svytable_design6)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table6 <- prop.table(svytable_design6) * 100  
+print(round(weighted_proportion_table6, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df6 <- as.data.frame(weighted_proportion_table6)
+```
+
+
+
+*(ii) Female*
+
+```{r}
+labour_force_female<- female%>%
+  filter(Employed == "1 Yes")
+```
+
+```{r}
+labour_force_female <- labour_force_female %>%
+  rename(Occupation = we027)
+```
+
+*Counting NA data*
+```{r}
+# Assuming final_data_No_temp is your dataset
+num_NA_job_search2 <- sum(is.na(labour_force_female$Occupation))
+
+# Print the result
+print(num_NA_job_search2)
+```
+
+```{r}
+labour_force_female$Occupation <- ifelse(labour_force_female$Occupation == "9", "9 Elementary occupations", labour_force_female$Occupation)
+labour_force_female$Occupation <- ifelse(labour_force_female$Occupation == "4", "4 Clerks", labour_force_female$Occupation)
+labour_force_female$Occupation <- ifelse(labour_force_female$Occupation == "5", "5 Service workers and shop and market sales workers", labour_force_female$Occupation)
+labour_force_female$Occupation <- ifelse(labour_force_female$Occupation == "6", "6 Skilled agricultural and fishery workers", labour_force_female$Occupation)
+labour_force_female$Occupation <- ifelse(labour_force_female$Occupation == "7", "7 Craft and related trade workers", labour_force_female$Occupation)
+labour_force_female$Occupation <- ifelse(labour_force_female$Occupation == "8", "8 Plant and machine operators and assemblers", labour_force_female$Occupation)
+labour_force_female$Occupation <- ifelse(labour_force_female$Occupation == "10", "10 Workers not classified anywhere", labour_force_female$Occupation)
+labour_force_female$Occupation <- ifelse(labour_force_female$Occupation == "11", "11 Other", labour_force_female$Occupation)
+```
+
+```{r}
+# Create the frequency distribution table
+frequency6a <- table(labour_force_female$Occupation)
+print(frequency6a)
+
+# Define the survey design
+design6a <- svydesign(id = ~1, weights = ~stateindividualweight, data = labour_force_female)
+
+# Create a weighted frequency distribution table
+svytable_design6a <- svytable(~Occupation, design = design6a)
+print(svytable_design6a)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table6a <- prop.table(svytable_design6a) * 100  
+print(round(weighted_proportion_table6a, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df6a <- as.data.frame(weighted_proportion_table6a)
+```
+
+
+
+**B. FINANCIAL SECURITY**
+
+
+*Combining currently working and not working*
+```{r}
+current_scenario_male<- bind_rows(labour_force_male, currently_not_working_male)
+```
+
+```{r}
+current_scenario_female<- bind_rows(labour_force_female, currently_not_working_female)
+```
+
+
+**I. Financial Security - Pension**
+
+
+*(i) Male*
+
+*Counting NA data*
+```{r}
+# Assuming final_data_No_temp is your dataset
+num_NA_job_search3 <- sum(is.na(current_scenario_male$we412))
+
+# Print the result
+print(num_NA_job_search3)
+```
+
+
+```{r}
+
+current_scenario_male <- current_scenario_male %>%
+  mutate(we412 = ifelse(is.na(we412), "NA", we412),
+         we412 = ifelse(we412 %in% c("1 Currently receiving", "2 Expected to receive in future"), 
+                        "Currently receiving or expected to receive", we412))
+
+
+# Create the frequency distribution table
+frequency8 <- table(current_scenario_male$we412)
+print(frequency8)
+
+# Define the survey design
+design8 <- svydesign(id = ~1, weights = ~stateindividualweight, data = current_scenario_male)
+
+# Create a weighted frequency distribution table
+svytable_design8 <- svytable(~we412, design = design8)
+print(svytable_design8)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table8 <- prop.table(svytable_design8) * 100  
+print(round(weighted_proportion_table8, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df8 <- as.data.frame(weighted_proportion_table8)
+
+```
+
+
+*(ii) Female*
+
+*Counting NA data*
+```{r}
+# Assuming final_data_No_temp is your dataset
+num_NA_job_search3 <- sum(is.na(current_scenario_female$we412))
+
+# Print the result
+print(num_NA_job_search3)
+```
+
+
+```{r}
+current_scenario_female <- current_scenario_female %>%
+  mutate(we412 = ifelse(is.na(we412), "NA", we412),
+         we412 = ifelse(we412 %in% c("1 Currently receiving", "2 Expected to receive in future"), 
+                        "Currently receiving or expected to receive", we412))
+
+
+# Create the frequency distribution table
+frequency8a <- table(current_scenario_female$we412)
+print(frequency8a)
+
+# Define the survey design
+design8a <- svydesign(id = ~1, weights = ~stateindividualweight, data = current_scenario_female)
+
+# Create a weighted frequency distribution table
+svytable_design8a <- svytable(~we412, design = design8a)
+print(svytable_design8a)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table8a <- prop.table(svytable_design8a) * 100  
+print(round(weighted_proportion_table8a, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df8a <- as.data.frame(weighted_proportion_table8a)
+```
+
+
+**III. Financial Security - Wages/Salary**
+
+*(i) Male*
+
+*Counting NA data*
+```{r}
+# Assuming final_data_No_temp is your dataset
+num_NA_job_search4 <- sum(is.na(labour_force_male$we014))
+
+# Print the result
+print(num_NA_job_search4)
+```
+
+
+```{r}
+# Create the frequency distribution table
+frequency9 <- table(labour_force_male$we014)
+print(frequency9)
+
+# Define the survey design
+design9 <- svydesign(id = ~1, weights = ~stateindividualweight, data = labour_force_male)
+
+# Create a weighted frequency distribution table
+svytable_design9 <- svytable(~we014, design = design9)
+print(svytable_design9)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table9 <- prop.table(svytable_design9) * 100  
+print(round(weighted_proportion_table9, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df9 <- as.data.frame(weighted_proportion_table9)
+```
+
+
+*(ii) Female*
+
+*Counting NA data*
+```{r}
+# Assuming final_data_No_temp is your dataset
+num_NA_job_search4 <- sum(is.na(labour_force_female$we014))
+
+# Print the result
+print(num_NA_job_search4)
+```
+
+
+```{r}
+# Create the frequency distribution table
+frequency9a <- table(labour_force_female$we014)
+print(frequency9a)
+
+# Define the survey design
+design9a <- svydesign(id = ~1, weights = ~stateindividualweight, data = labour_force_female)
+
+# Create a weighted frequency distribution table
+svytable_design9a <- svytable(~we014, design = design9a)
+print(svytable_design9a)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table9a <- prop.table(svytable_design9a) * 100  
+print(round(weighted_proportion_table9a, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df9a <- as.data.frame(weighted_proportion_table9a)
+```
+
+
+
+
+**IV. Financial Security - Help from Family members**
+
+*(i) Male*
+
+*Counting NA data*
+```{r}
+# Assuming final_data_No_temp is your dataset
+num_NA_job_search5 <- sum(is.na(current_scenario_male$fs401))
+
+# Print the result
+print(num_NA_job_search5)
+```
+
+
+```{r}
+# Create the frequency distribution table
+frequency10 <- table(current_scenario_male$fs401)
+print(frequency10)
+
+# Proportion table
+proportion_table10 <- prop.table(frequency10) * 100 
+print(round(proportion_table10, digits=2))
+
+# Define the survey design
+design10 <- svydesign(id = ~1, weights = ~stateindividualweight, data = current_scenario_male)
+
+# Create a weighted frequency distribution table
+svytable_design10 <- svytable(~fs401, design = design10)
+print(svytable_design10)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table10 <- prop.table(svytable_design10) * 100  
+print(round(weighted_proportion_table10, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df10 <- as.data.frame(weighted_proportion_table10)
+
+```
+
+
+
+*(ii) Female*
+
+*Counting NA data*
+```{r}
+# Assuming final_data_No_temp is your dataset
+num_NA_job_search5 <- sum(is.na(current_scenario_female$fs401))
+
+# Print the result
+print(num_NA_job_search5)
+```
+
+
+```{r}
+# Create the frequency distribution table
+frequency10a <- table(current_scenario_female$fs401)
+print(frequency10a)
+
+# Proportion table
+proportion_table10a <- prop.table(frequency10a) * 100 
+print(round(proportion_table10a, digits=2))
+
+# Define the survey design
+design10a <- svydesign(id = ~1, weights = ~stateindividualweight, data = current_scenario_female)
+
+# Create a weighted frequency distribution table
+svytable_design10a <- svytable(~fs401, design = design10a)
+print(svytable_design10a)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table10a <- prop.table(svytable_design10a) * 100  
+print(round(weighted_proportion_table10a, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df10a <- as.data.frame(weighted_proportion_table10a)
+```

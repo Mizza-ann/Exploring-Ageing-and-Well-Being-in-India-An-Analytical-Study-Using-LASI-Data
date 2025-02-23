@@ -1,0 +1,229 @@
+---
+title: "Untitled"
+author: "Mizza"
+date: "2024-06-24"
+output: html_document
+---
+
+```{r}
+#| label: setup
+#| warning: false
+#| echo: false
+
+library(ggplot2)
+library(readxl)
+library(dplyr)
+library(tidyverse)
+library(tidyr)
+library(survey)
+library(ggsankey)
+
+Household <- read_excel("C:/Users/mizza/OneDrive/Desktop/CMD/2. LASI/2_LASI_W1_Household_v4 1.xlsx")
+Individual <- read_excel("C:/Users/mizza/OneDrive/Desktop/CMD/2. LASI/3_LASI_W1_Individual_data 1.xlsx")
+merged_data <- merge (Individual, Household, by = "hhid", all = TRUE)
+roster <- read_excel ("C:/Users/mizza/OneDrive/Desktop/CMD/2. LASI/1_LASI_W1_HH_roster 1.xlsx")
+final_data <- merge (merged_data, roster, by = "hhid", all = TRUE)
+```
+
+
+**DATA OF VULNERABLE GROUP - SENIOR CITIZENS**
+
+```{r}
+final_data <- final_data%>%
+  rename(Age = dm005)
+```
+
+```{r}
+
+##TO APPLY AGE FILTER##
+create_age_category <- function(Age) {
+  if (is.na(Age)) {
+    return(NA)
+  }
+  
+  if (Age >= 60 & Age <= 69) {
+    return("Young Old")
+  } else if (Age >= 70 & Age <= 79) {
+    return("Old")
+  } else if (Age >= 80) {
+    return("Very Old")
+  } else {
+    return(NA) 
+  }
+}
+final_data$AgeCategory <- sapply(final_data$Age, create_age_category)
+
+final_data <- final_data[final_data$AgeCategory %in% c("Young Old", "Old", "Very Old"), ]
+```
+
+**EDUCATION BUCKET**
+
+```{r}
+final_data <- final_data %>%
+  mutate(Education_level = case_when(
+    dm006 == "2 No" ~ "Uneducated",
+    dm008 %in% c("1 Less than Primary (Standard 1-4)", 
+                 "2 Primary Completed (Standard 5-7)", 
+                 "3 Middle Completed (Standard 8- 9)") ~ "Primary School",
+    dm008 == "4 Secondary School/Matriculation completed" ~ "Secondary School",
+    dm008 %in% c("5 Higher Secondary/Intermediate/Senior Secondary completed", 
+                 "6 Diploma and certificate holders") ~ "Senior Secondary School",
+    dm008 %in% c("7 Graduate degree (B.A., B.Sc., B. Com.) completed", 
+                 "8 Post-graduate degree or (M.A., M.Sc., M. Com.) above (M.Phil, Ph.D., Post-Doc) completed", 
+                 "9 Professional course/degree (B.Ed, BE, B.Tech, MBBS, BHMS, BAMS, B.Pharm, BCS, BCA, BBA, LLB, BVSc., B. Arch, M.Ed, ME, M.Tech, MD, M.Pharm, MCS, MCA, MBA,LLM, MVSc., M. Arch, MS, CA, CS, CWA)Completed") ~ "Tertiary Education",
+    TRUE ~ "Other"
+  ))
+```
+
+```{r}
+final_data <- final_data %>%
+  rename(Gender = dm003)
+```
+
+
+
+**CURRENT EMPLOYMENT SCENARIO**
+
+```{r}
+final_data<-final_data%>%
+  rename(Employed = we004)
+```
+
+```{r}
+
+# Replace NA values in the Employed column with "Never worked"
+final_data$Employed[is.na(final_data$Employed)] <- "Never worked"
+
+
+# Create the frequency distribution table
+frequency5 <- table(final_data$Employed)
+print(frequency5)
+ 
+# Define the survey design
+design5 <- svydesign(id = ~1, weights = ~stateindividualweight, data = final_data)
+
+# Create a weighted frequency distribution table
+svytable_design5 <- svytable(~Employed, design = design5)
+print(svytable_design5)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table5 <- prop.table(svytable_design5) * 100  
+print(round(weighted_proportion_table5, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df5 <- as.data.frame(weighted_proportion_table5)
+```
+
+
+```{r}
+final_data <- final_data %>%
+  mutate(
+    Employed = as.factor(Employed),
+    dm013 = as.factor(dm013),
+    Gender = as.factor(Gender),
+    Age = as.numeric(Age),
+    dm021 = as.factor(dm021)
+  ) %>%
+  drop_na(Employed, dm013, Gender, Age, dm021)
+
+# Create separate variables for each condition
+final_data <- final_data %>%
+  mutate(
+    Scheduled_Caste = ifelse(dm013 == "1 Scheduled Caste", "Yes", "No"),
+    Scheduled_Tribe = ifelse(dm013 == "2 Scheduled Tribe", "Yes", "No"),
+    Old_Female = ifelse(Gender == "2 Female" & Age >= 80, "Yes", "No"),
+    Widowed = ifelse(dm021 == "2 Widowed", "Yes", "No")
+  )
+
+# Perform chi-squared tests for each condition
+
+# Scheduled Caste
+table_scheduled_caste <- table(final_data$Employed, final_data$Scheduled_Caste)
+chi_squared_scheduled_caste <- chisq.test(table_scheduled_caste)
+chi_squared_scheduled_caste
+
+# Scheduled Tribe
+table_scheduled_tribe <- table(final_data$Employed, final_data$Scheduled_Tribe)
+chi_squared_scheduled_tribe <- chisq.test(table_scheduled_tribe)
+chi_squared_scheduled_tribe
+
+# Old Female
+table_old_female <- table(final_data$Employed, final_data$Old_Female)
+chi_squared_old_female <- chisq.test(table_old_female)
+chi_squared_old_female
+
+# Widowed
+table_widowed <- table(final_data$Employed, final_data$Widowed)
+chi_squared_widowed <- chisq.test(table_widowed)
+chi_squared_widowed
+```
+
+*i.e.., statistically significant*
+
+
+
+
+*Since widowed and old female has very few sample observations it is better to use fishers test*
+```{r}
+final_data <- final_data %>%
+  mutate(
+    Decision = as.factor(Decision),
+    Old_Female = as.factor(ifelse(dm003 == "2 Female" & Age >= 80, "Yes", "No")),
+    Widowed = as.factor(ifelse(dm021 == "2 Widowed", "Yes", "No"))
+  ) %>%
+  drop_na(Decision, Old_Female, Widowed)
+
+# Create contingency tables
+table_old_female <- table(final_data$Decision, final_data$Old_Female)
+table_widowed <- table(final_data$Decision, final_data$Widowed)
+
+# Perform Fisher's Exact Test for Old Female
+fisher_test_old_female <- fisher.test(table_old_female)
+fisher_test_old_female
+
+# Perform Fisher's Exact Test for Widowed
+fisher_test_widowed <- fisher.test(table_widowed)
+fisher_test_widowed
+```
+
+*i.e.., no significant association*
+
+
+
+*Since widowed has very few sample observations it is better to use fishers test*
+```{r}
+labour_force <- labour_force %>%
+  mutate(
+    Occupation = as.factor(Occupation),
+    Widowed = as.factor(ifelse(dm021 == "2 Widowed", "Yes", "No"))
+  ) %>%
+  drop_na(Occupation, Widowed)
+
+# Create contingency tables
+table_widowed <- table(labour_force$Occupation, labour_force$Widowed)
+
+# Perform Fisher's Exact Test for Widowed
+fisher_test_widowed <- fisher.test(table_widowed)
+fisher_test_widowed
+```
+
+*i.e.., no significant association in widowed*
+
+
+*Since old female has very few sample observations it is better to use fishers test*
+```{r}
+current_scenario <- current_scenario %>%
+  mutate(
+    we412 = as.factor(we412),
+   Old_Female= as.factor(ifelse(dm003 == "2 Female" & Age >= 80, "Yes", "No"))
+  ) %>%
+  drop_na(we412, Old_Female)
+
+# Create contingency tables
+table_old_female <- table(current_scenario$we412, current_scenario$Old_Female)
+
+# Perform Fisher's Exact Test for Old Female
+fisher_test_old_female <- fisher.test(table_old_female)
+fisher_test_old_female
+```
+

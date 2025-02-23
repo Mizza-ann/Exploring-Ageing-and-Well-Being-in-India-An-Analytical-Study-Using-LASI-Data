@@ -1,0 +1,298 @@
+---
+title: "Living Arrangement"
+author: "Mizza"
+date: "2024-06-14"
+output: html_document
+---
+
+```{r}
+#| label: setup
+#| warning: false
+#| echo: false
+
+library(ggplot2)
+library(readxl)
+library(dplyr)
+library(tidyverse)
+library(tidyr)
+library(survey)
+library(ggsankey)
+
+Household <- read_excel("C:/Users/mizza/OneDrive/Desktop/CMD/2. LASI/2_LASI_W1_Household_v4 1.xlsx")
+Individual <- read_excel("C:/Users/mizza/OneDrive/Desktop/CMD/2. LASI/3_LASI_W1_Individual_data 1.xlsx")
+merged_data <- merge (Individual, Household, by = "hhid", all = TRUE)
+roster <- read_excel ("C:/Users/mizza/OneDrive/Desktop/CMD/2. LASI/1_LASI_W1_HH_roster 1.xlsx")
+final_data <- merge (merged_data, roster, by = "hhid", all = TRUE)
+```
+
+
+**DATA OF VULNERABLE GROUP - SENIOR CITIZENS**
+
+```{r}
+final_data <- final_data%>%
+  rename(Age = dm005)
+```
+
+```{r}
+
+##TO APPLY AGE FILTER##
+create_age_category <- function(Age) {
+  if (is.na(Age)) {
+    return(NA)
+  }
+  
+  if (Age >= 60 & Age <= 69) {
+    return("Young Old")
+  } else if (Age >= 70 & Age <= 79) {
+    return("Old")
+  } else if (Age >= 80) {
+    return("Very Old")
+  } else {
+    return(NA) 
+  }
+}
+final_data$AgeCategory <- sapply(final_data$Age, create_age_category)
+
+final_data <- final_data[final_data$AgeCategory %in% c("Young Old", "Old", "Very Old"), ]
+```
+
+
+**EDUCATION BUCKET**
+
+```{r}
+final_data <- final_data %>%
+  mutate(Education_level = case_when(
+    dm006 == "2 No" ~ "Uneducated",
+    dm008 %in% c("1 Less than Primary (Standard 1-4)", 
+                 "2 Primary Completed (Standard 5-7)", 
+                 "3 Middle Completed (Standard 8- 9)") ~ "Primary School",
+    dm008 == "4 Secondary School/Matriculation completed" ~ "Secondary School",
+    dm008 %in% c("5 Higher Secondary/Intermediate/Senior Secondary completed", 
+                 "6 Diploma and certificate holders") ~ "Senior Secondary School",
+    dm008 %in% c("7 Graduate degree (B.A., B.Sc., B. Com.) completed", 
+                 "8 Post-graduate degree or (M.A., M.Sc., M. Com.) above (M.Phil, Ph.D., Post-Doc) completed", 
+                 "9 Professional course/degree (B.Ed, BE, B.Tech, MBBS, BHMS, BAMS, B.Pharm, BCS, BCA, BBA, LLB, BVSc., B. Arch, M.Ed, ME, M.Tech, MD, M.Pharm, MCS, MCA, MBA,LLM, MVSc., M. Arch, MS, CA, CS, CWA)Completed") ~ "Tertiary Education",
+    TRUE ~ "Other"
+  ))
+```
+
+
+**INTENTION TO CHANGE**
+
+```{r}
+final_data <- final_data %>%
+  rename(Intention_change = fs331)
+```
+
+*General Analysis*
+```{r}
+# Create the frequency distribution table
+frequency <- table(final_data$Intention_change)
+print(frequency)
+
+# Proportion table
+proportion_table <- prop.table(frequency) * 100  
+print(round(proportion_table, digits=2))
+
+# Define the survey design
+design <- svydesign(id = ~1, weights = ~stateindividualweight, data = final_data)
+
+# Create a weighted frequency distribution table
+svytable_design <- svytable(~Intention_change, design = design)
+print(svytable_design)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table <- prop.table(svytable_design) * 100  
+print(round(weighted_proportion_table, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df <- as.data.frame(weighted_proportion_table)
+
+count_Intention_change <- sum(!is.na(final_data$Intention_change))
+
+# Print the result
+print(count_Intention_change)
+```
+
+
+```{r}
+frequency1 <- table(final_data$fs331_other)
+print(frequency1)
+```
+
+
+*Merging all Yes*
+```{r}
+# Create a copy of the dataset to avoid modifying the original data
+final_data$change <- final_data$Intention_change
+
+# Define the values to be replaced with "Yes"
+values_to_replace <- c(
+  "2 Yes, prefer to live alone",
+  "3 Yes, prefer to live with spouse only",
+  "4 Yes, prefer to live with other child",
+  "5 Yes, prefer to live with other relatives",
+  "6 Yes, prefer to live with my own family (spouse and children) only",
+  "7 Yes, prefer to move into old age home"
+)
+
+# Replace the specified values with "Yes" in the "change" column
+final_data$change[final_data$Intention_change %in% values_to_replace] <- "Yes"
+
+
+# Create the frequency distribution table
+frequency2 <- table(final_data$change)
+print(frequency2)
+
+# Proportion table
+proportion_table2 <- prop.table(frequency2) * 100  
+print(round(proportion_table, digits=2))
+
+# Define the survey design
+design2 <- svydesign(id = ~1, weights = ~stateindividualweight, data = final_data)
+
+# Create a weighted frequency distribution table
+svytable_design2 <- svytable(~change, design = design2)
+print(svytable_design2)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table2 <- prop.table(svytable_design2) * 100  
+print(round(weighted_proportion_table2, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df2 <- as.data.frame(weighted_proportion_table2)
+```
+
+
+**I. Satisfaction**
+
+```{r}
+final_data<- final_data%>%
+  rename(Satisfaction= fs329)
+```
+
+```{r}
+# Create the frequency distribution table
+frequency3 <- table(final_data$Satisfaction)
+print(frequency3)
+
+# Proportion table
+proportion_table3 <- prop.table(frequency3) * 100  
+print(round(proportion_table3, digits=2))
+
+# Define the survey design
+design3 <- svydesign(id = ~1, weights = ~stateindividualweight, data = final_data)
+
+# Create a weighted frequency distribution table
+svytable_design3 <- svytable(~Satisfaction, design = design3)
+print(svytable_design3)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table3<- prop.table(svytable_design3) * 100  
+print(round(weighted_proportion_table3, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df3 <- as.data.frame(weighted_proportion_table3)
+
+count_Satisfaction <- sum(!is.na(final_data$Satisfaction))
+
+# Print the result
+print(count_Satisfaction)
+```
+
+
+**II. Decision making**
+
+```{r}
+final_data<- final_data%>%
+  rename(Decision = fs330)
+```
+
+```{r}
+# Create the frequency distribution table
+frequency4 <- table(final_data$Decision)
+print(frequency4)
+
+# Proportion table
+proportion_table4 <- prop.table(frequency4) * 100  
+print(round(proportion_table4, digits=2))
+
+# Define the survey design
+design4 <- svydesign(id = ~1, weights = ~stateindividualweight, data = final_data)
+
+# Create a weighted frequency distribution table
+svytable_design4 <- svytable(~Decision, design = design4)
+print(svytable_design3)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table4<- prop.table(svytable_design4) * 100  
+print(round(weighted_proportion_table4, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df4 <- as.data.frame(weighted_proportion_table4)
+
+count_Decision <- sum(!is.na(final_data$Decision))
+
+# Print the result
+print(count_Decision)
+```
+
+
+```{r}
+# Create a copy of the dataset to avoid modifying the original data
+final_data$Decision <- final_data$Decision
+
+# Define the values to be replaced with "family"
+values_to_replace <- c(
+  "10 Daughter-in-law",
+  "12 Grand parents",
+  "13 Parent-in-law",
+  "14 Other relatives",
+  "2 Father",
+  "3 Mother",
+  "4 Brother/s",
+  "5 Sister/s",
+  "6 Spouse / partner",
+  "7 Son/s",
+  "8 Daughter/s",
+  "9 Son-in-law"
+)
+
+# Replace the specified values with "Yes" in the "change" column
+final_data$Decision[final_data$Decision %in% values_to_replace] <- "family"
+
+
+# Create the frequency distribution table
+frequency4a <- table(final_data$Decision)
+print(frequency4a)
+
+# Define the survey design
+design4a <- svydesign(id = ~1, weights = ~stateindividualweight, data = final_data)
+
+# Create a weighted frequency distribution table
+svytable_design4a <- svytable(~Decision, design = design4a)
+print(svytable_design4a)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table4a <- prop.table(svytable_design4a) * 100  
+print(round(weighted_proportion_table4a, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df4a <- as.data.frame(weighted_proportion_table4a)
+```
+
+
+**III. OLD AGE ANALYSIS**
+
+```{r}
+# Count the number of occurrences of "7 Yes, prefer to move into old age home" in the column f2331
+count <- sum(final_data$Intention_change == "7 Yes, prefer to move into old age home", na.rm = TRUE)
+
+# Print the count
+print(count)
+
+```
+
+
+
+

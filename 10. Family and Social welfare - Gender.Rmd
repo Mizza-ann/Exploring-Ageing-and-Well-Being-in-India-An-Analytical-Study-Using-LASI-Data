@@ -1,0 +1,1068 @@
+---
+title: "Untitled"
+author: "Mizza"
+date: "2024-06-24"
+output: html_document
+---
+
+```{r}
+#| label: setup
+#| warning: false
+#| echo: false
+
+library(ggplot2)
+library(readxl)
+library(dplyr)
+library(tidyverse)
+library(tidyr)
+library(survey)
+library(ggsankey)
+
+Household <- read_excel("C:/Users/mizza/OneDrive/Desktop/CMD/2. LASI/2_LASI_W1_Household_v4 1.xlsx")
+Individual <- read_excel("C:/Users/mizza/OneDrive/Desktop/CMD/2. LASI/3_LASI_W1_Individual_data 1.xlsx")
+merged_data <- merge (Individual, Household, by = "hhid", all = TRUE)
+roster <- read_excel ("C:/Users/mizza/OneDrive/Desktop/CMD/2. LASI/1_LASI_W1_HH_roster 1.xlsx")
+final_data <- merge (merged_data, roster, by = "hhid", all = TRUE)
+```
+
+
+**DATA OF VULNERABLE GROUP - SENIOR CITIZENS**
+
+```{r}
+final_data <- final_data%>%
+  rename(Age = dm005)
+```
+
+```{r}
+
+##TO APPLY AGE FILTER##
+create_age_category <- function(Age) {
+  if (is.na(Age)) {
+    return(NA)
+  }
+  
+  if (Age >= 60 & Age <= 69) {
+    return("Young Old")
+  } else if (Age >= 70 & Age <= 79) {
+    return("Old")
+  } else if (Age >= 80) {
+    return("Very Old")
+  } else {
+    return(NA) 
+  }
+}
+final_data$AgeCategory <- sapply(final_data$Age, create_age_category)
+
+final_data <- final_data[final_data$AgeCategory %in% c("Young Old", "Old", "Very Old"), ]
+```
+
+
+**EDUCATION BUCKET**
+
+```{r}
+final_data <- final_data %>%
+  mutate(Education_level = case_when(
+    dm006 == "2 No" ~ "Uneducated",
+    dm008 %in% c("1 Less than Primary (Standard 1-4)", 
+                 "2 Primary Completed (Standard 5-7)", 
+                 "3 Middle Completed (Standard 8- 9)") ~ "Primary School",
+    dm008 == "4 Secondary School/Matriculation completed" ~ "Secondary School",
+    dm008 %in% c("5 Higher Secondary/Intermediate/Senior Secondary completed", 
+                 "6 Diploma and certificate holders") ~ "Senior Secondary School",
+    dm008 %in% c("7 Graduate degree (B.A., B.Sc., B. Com.) completed", 
+                 "8 Post-graduate degree or (M.A., M.Sc., M. Com.) above (M.Phil, Ph.D., Post-Doc) completed", 
+                 "9 Professional course/degree (B.Ed, BE, B.Tech, MBBS, BHMS, BAMS, B.Pharm, BCS, BCA, BBA, LLB, BVSc., B. Arch, M.Ed, ME, M.Tech, MD, M.Pharm, MCS, MCA, MBA,LLM, MVSc., M. Arch, MS, CA, CS, CWA)Completed") ~ "Tertiary Education",
+    TRUE ~ "Other"
+  ))
+```
+
+```{r}
+final_data<- final_data%>%
+  rename(Gender = dm003)
+```
+
+```{r}
+male<- final_data%>%
+  filter(Gender == "1 Male")
+```
+
+```{r}
+female<- final_data%>%
+  filter(Gender == "2 Female")
+```
+
+
+**_____INTENTION TO CHANGE_____**
+
+```{r}
+male <- male %>%
+  rename(Intention_change = fs331)
+```
+
+
+*General Analysis*
+
+*(i) Male*
+```{r}
+# Create a copy of the dataset to avoid modifying the original data
+male$change <- male$Intention_change
+
+# Define the values to be replaced with "Yes"
+values_to_replace <- c(
+  "2 Yes, prefer to live alone",
+  "3 Yes, prefer to live with spouse only",
+  "4 Yes, prefer to live with other child",
+  "5 Yes, prefer to live with other relatives",
+  "6 Yes, prefer to live with my own family (spouse and children) only",
+  "7 Yes, prefer to move into old age home"
+)
+
+# Replace the specified values with "Yes" in the "change" column
+male$change[male$Intention_change %in% values_to_replace] <- "Yes"
+
+
+# Create the frequency distribution table
+frequency2 <- table(male$change)
+print(frequency2)
+
+# Proportion table
+proportion_table2 <- prop.table(frequency2) * 100  
+print(round(proportion_table, digits=2))
+
+# Define the survey design
+design2 <- svydesign(id = ~1, weights = ~stateindividualweight, data = male)
+
+# Create a weighted frequency distribution table
+svytable_design2 <- svytable(~change, design = design2)
+print(svytable_design2)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table2 <- prop.table(svytable_design2) * 100  
+print(round(weighted_proportion_table2, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df2 <- as.data.frame(weighted_proportion_table2)
+```
+
+
+
+*(ii) Female*
+```{r}
+female <- female %>%
+  rename(Intention_change = fs331)
+```
+
+```{r}
+# Create a copy of the dataset to avoid modifying the original data
+female$change <- female$Intention_change
+
+# Define the values to be replaced with "Yes"
+values_to_replace <- c(
+  "2 Yes, prefer to live alone",
+  "3 Yes, prefer to live with spouse only",
+  "4 Yes, prefer to live with other child",
+  "5 Yes, prefer to live with other relatives",
+  "6 Yes, prefer to live with my own family (spouse and children) only",
+  "7 Yes, prefer to move into old age home"
+)
+
+# Replace the specified values with "Yes" in the "change" column
+female$change[female$Intention_change %in% values_to_replace] <- "Yes"
+
+
+# Create the frequency distribution table
+frequency2a <- table(female$change)
+print(frequency2a)
+
+# Define the survey design
+design2a <- svydesign(id = ~1, weights = ~stateindividualweight, data = female)
+
+# Create a weighted frequency distribution table
+svytable_design2a <- svytable(~change, design = design2a)
+print(svytable_design2a)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table2a <- prop.table(svytable_design2a) * 100  
+print(round(weighted_proportion_table2a, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df2a <- as.data.frame(weighted_proportion_table2a)
+```
+
+
+**I. Satisfaction**
+
+```{r}
+male<- male%>%
+  rename(Satisfaction= fs329)
+```
+
+
+*(i) Male*
+```{r}
+# Create the frequency distribution table
+frequency3 <- table(male$Satisfaction)
+print(frequency3)
+
+# Proportion table
+proportion_table3 <- prop.table(frequency3) * 100  
+print(round(proportion_table3, digits=2))
+
+# Define the survey design
+design3 <- svydesign(id = ~1, weights = ~stateindividualweight, data = male)
+
+# Create a weighted frequency distribution table
+svytable_design3 <- svytable(~Satisfaction, design = design3)
+print(svytable_design3)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table3<- prop.table(svytable_design3) * 100  
+print(round(weighted_proportion_table3, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df3 <- as.data.frame(weighted_proportion_table3)
+```
+
+
+*(ii) Female*
+```{r}
+female<- female%>%
+  rename(Satisfaction= fs329)
+```
+
+```{r}
+# Create the frequency distribution table
+frequency3z <- table(female$Satisfaction)
+print(frequency3z)
+
+# Proportion table
+proportion_table3z <- prop.table(frequency3) * 100  
+print(round(proportion_table3z, digits=2))
+
+# Define the survey design
+design3z <- svydesign(id = ~1, weights = ~stateindividualweight, data = female)
+
+# Create a weighted frequency distribution table
+svytable_design3z <- svytable(~Satisfaction, design = design3z)
+print(svytable_design3z)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table3z<- prop.table(svytable_design3z) * 100  
+print(round(weighted_proportion_table3z, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df3z <- as.data.frame(weighted_proportion_table3z)
+```
+
+
+
+**II. Decision making**
+
+*(i) Male*
+
+```{r}
+male<- male%>%
+  rename(Decision = fs330)
+```
+
+```{r}
+# Create a copy of the dataset to avoid modifying the original data
+male$Decision <- male$Decision
+
+# Define the values to be replaced with "family"
+values_to_replace <- c(
+  "10 Daughter-in-law",
+  "12 Grand parents",
+  "13 Parent-in-law",
+  "14 Other relatives",
+  "2 Father",
+  "3 Mother",
+  "4 Brother/s",
+  "5 Sister/s",
+  "6 Spouse / partner",
+  "7 Son/s",
+  "8 Daughter/s",
+  "9 Son-in-law"
+)
+
+# Replace the specified values with "Yes" in the "change" column
+male$Decision[male$Decision %in% values_to_replace] <- "family"
+
+
+# Create the frequency distribution table
+frequency4a <- table(male$Decision)
+print(frequency4a)
+
+# Define the survey design
+design4a <- svydesign(id = ~1, weights = ~stateindividualweight, data = male)
+
+# Create a weighted frequency distribution table
+svytable_design4a <- svytable(~Decision, design = design4a)
+print(svytable_design4a)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table4a <- prop.table(svytable_design4a) * 100  
+print(round(weighted_proportion_table4a, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df4a <- as.data.frame(weighted_proportion_table4a)
+```
+
+
+*(ii) Female*
+
+```{r}
+female<- female%>%
+  rename(Decision = fs330)
+```
+
+```{r}
+# Create a copy of the dataset to avoid modifying the original data
+female$Decision <- female$Decision
+
+# Define the values to be replaced with "family"
+values_to_replace <- c(
+  "10 Daughter-in-law",
+  "12 Grand parents",
+  "13 Parent-in-law",
+  "14 Other relatives",
+  "2 Father",
+  "3 Mother",
+  "4 Brother/s",
+  "5 Sister/s",
+  "6 Spouse / partner",
+  "7 Son/s",
+  "8 Daughter/s",
+  "9 Son-in-law"
+)
+
+# Replace the specified values with "Yes" in the "change" column
+female$Decision[female$Decision %in% values_to_replace] <- "family"
+
+
+# Create the frequency distribution table
+frequency4ab <- table(female$Decision)
+print(frequency4ab)
+
+# Define the survey design
+design4a <- svydesign(id = ~1, weights = ~stateindividualweight, data = female)
+
+# Create a weighted frequency distribution table
+svytable_design4a <- svytable(~Decision, design = design4a)
+print(svytable_design4a)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table4a <- prop.table(svytable_design4a) * 100  
+print(round(weighted_proportion_table4a, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df4a <- as.data.frame(weighted_proportion_table4a)
+```
+
+
+
+
+**______SOCIAL RELATIONSHIP**
+
+**I. Interaction with friends and family**
+
+**1. Close Relationship**
+
+*(i) Male*
+```{r}
+male <- male %>%
+  rename(family = fs323)
+```
+
+**1. Family Relation - Yes**
+```{r}
+fam_relation_yesm<- male%>%
+  filter(fs323s1 == "1 Yes"| fs323s2 == "1 Yes"|fs323s3 == "1 Yes"|fs323s4 == "1 Yes"|fs323s5 == "1 Yes"|fs323s6 == "1 Yes"|fs323s7 == "1 Yes"|fs323s8 == "1 Yes"|fs323s9 == "1 Yes"|fs323s10 == "1 Yes"|fs323s11 == "1 Yes"|fs323s12 == "1 Yes"|fs323s13 == "1 Yes" )
+```
+
+**2. Friends Relation - Yes**
+```{r}
+frnds_relation_yesm<- male%>%
+  filter(fs323s14 == "1 Yes")
+```
+
+**3. Relation with nobody**
+```{r}
+relation_nom<- male%>%
+  filter(fs323s16 == "1 Yes")
+```
+
+
+*Close relation with anybody*
+```{r}
+# Calculate the frequency of "1 Yes" in any of the specified columns
+yes_freq1 <- male%>%
+  filter(fs323s1 == "1 Yes"| fs323s2 == "1 Yes"|fs323s3 == "1 Yes"|fs323s4 == "1 Yes"|fs323s5 == "1 Yes"|fs323s6 == "1 Yes"|fs323s7 == "1 Yes"|fs323s8 == "1 Yes"|fs323s9 == "1 Yes"|fs323s10 == "1 Yes"|fs323s11 == "1 Yes"|fs323s12 == "1 Yes"|fs323s13 == "1 Yes"|fs323s14 == "1 Yes"|fs323s15 == "1 Yes") %>%
+  summarise(freq_yes1 = n())
+
+# Calculate the frequency of "2 No" in all of the specified columns
+no_freq1 <- male%>%
+  filter(fs323s16 == "1 Yes" ) %>%
+  summarise(freq_no1 = n())
+
+# Print the results
+cat("Frequency '1 Yes':", yes_freq1$freq_yes1, "\n")
+cat("Frequency '2 No':", no_freq1$freq_no1, "\n")
+
+# Calculate the frequency of "1 Yes" in any of the specified columns
+yes_frequency1 <- male%>%
+  filter(fs323s1 == "1 Yes"| fs323s2 == "1 Yes"|fs323s3 == "1 Yes"|fs323s4 == "1 Yes"|fs323s5 == "1 Yes"|fs323s6 == "1 Yes"|fs323s7 == "1 Yes"|fs323s8 == "1 Yes"|fs323s9 == "1 Yes"|fs323s10 == "1 Yes"|fs323s11 == "1 Yes"|fs323s12 == "1 Yes"|fs323s13 == "1 Yes"|fs323s14 == "1 Yes"|fs323s15 == "1 Yes") %>%
+  summarise(freq_yes1 = sum(stateindividualweight))
+
+# Calculate the frequency of "2 No" in all of the specified columns
+no_frequency1 <- male%>%
+  filter(fs323s16 == "1 Yes") %>%
+  summarise(freq_no1 = sum(stateindividualweight))
+
+# Combine the frequencies and calculate the proportions
+total_responses1 <- sum(male$stateindividualweight)
+yes_proportion1 <- (yes_frequency1$freq_yes1 / total_responses1)*100
+no_proportion1 <- (no_frequency1$freq_no1 / total_responses1)*100
+
+# Create a data frame with the results
+results1 <- data.frame(
+  Response = c("1 Yes", "0 No", "NA"),
+  Weighted_Proportion = c(yes_proportion1, no_proportion1, 100 - (yes_proportion1 + no_proportion1))
+)
+
+# Print the results
+print(results1)
+```
+
+
+*(ii) Female*
+```{r}
+female <- female %>%
+  rename(family = fs323)
+```
+
+**1. Family Relation - Yes**
+```{r}
+fam_relation_yesf<- female%>%
+  filter(fs323s1 == "1 Yes"| fs323s2 == "1 Yes"|fs323s3 == "1 Yes"|fs323s4 == "1 Yes"|fs323s5 == "1 Yes"|fs323s6 == "1 Yes"|fs323s7 == "1 Yes"|fs323s8 == "1 Yes"|fs323s9 == "1 Yes"|fs323s10 == "1 Yes"|fs323s11 == "1 Yes"|fs323s12 == "1 Yes"|fs323s13 == "1 Yes" )
+```
+
+**2. Friends Relation - Yes**
+```{r}
+frnds_relation_yesf<- female%>%
+  filter(fs323s14 == "1 Yes")
+```
+
+**3. Relation with nobody**
+```{r}
+relation_nof<- female%>%
+  filter(fs323s16 == "1 Yes")
+```
+
+
+*Close relation with anybody*
+```{r}
+# Calculate the frequency of "1 Yes" in any of the specified columns
+yes_freq1a <- female%>%
+  filter(fs323s1 == "1 Yes"| fs323s2 == "1 Yes"|fs323s3 == "1 Yes"|fs323s4 == "1 Yes"|fs323s5 == "1 Yes"|fs323s6 == "1 Yes"|fs323s7 == "1 Yes"|fs323s8 == "1 Yes"|fs323s9 == "1 Yes"|fs323s10 == "1 Yes"|fs323s11 == "1 Yes"|fs323s12 == "1 Yes"|fs323s13 == "1 Yes"|fs323s14 == "1 Yes"|fs323s15 == "1 Yes") %>%
+  summarise(freq_yes1a = n())
+
+# Calculate the frequency of "2 No" in all of the specified columns
+no_freq1a <- female%>%
+  filter(fs323s16 == "1 Yes" ) %>%
+  summarise(freq_no1a = n())
+
+# Print the results
+cat("Frequency '1 Yes':", yes_freq1a$freq_yes1a, "\n")
+cat("Frequency '2 No':", no_freq1a$freq_no1a, "\n")
+
+# Calculate the frequency of "1 Yes" in any of the specified columns
+yes_frequency1a <- female%>%
+  filter(fs323s1 == "1 Yes"| fs323s2 == "1 Yes"|fs323s3 == "1 Yes"|fs323s4 == "1 Yes"|fs323s5 == "1 Yes"|fs323s6 == "1 Yes"|fs323s7 == "1 Yes"|fs323s8 == "1 Yes"|fs323s9 == "1 Yes"|fs323s10 == "1 Yes"|fs323s11 == "1 Yes"|fs323s12 == "1 Yes"|fs323s13 == "1 Yes"|fs323s14 == "1 Yes"|fs323s15 == "1 Yes") %>%
+  summarise(freq_yes1a = sum(stateindividualweight))
+
+# Calculate the frequency of "2 No" in all of the specified columns
+no_frequency1a <- female%>%
+  filter(fs323s16 == "1 Yes") %>%
+  summarise(freq_no1a = sum(stateindividualweight))
+
+# Combine the frequencies and calculate the proportions
+total_responses1a <- sum(female$stateindividualweight)
+yes_proportion1a <- (yes_frequency1a$freq_yes1a / total_responses1a)*100
+no_proportion1a <- (no_frequency1a$freq_no1a / total_responses1a)*100
+
+# Create a data frame with the results
+results1a <- data.frame(
+  Response = c("1 Yes", "0 No", "NA"),
+  Weighted_Proportion = c(yes_proportion1a, no_proportion1a, 100 - (yes_proportion1a + no_proportion1a))
+)
+
+# Print the results
+print(results1a)
+```
+
+
+
+
+**2. Friends**
+
+*(i) Male*
+```{r}
+male <- male %>%
+  rename(friends = fs324)
+```
+
+
+```{r}
+# Create the frequency distribution table
+frequency1j <- table(male$friends)
+print(frequency1j)
+
+# Define the survey design
+design1j <- svydesign(id = ~1, weights = ~stateindividualweight, data = male)
+
+# Create a weighted frequency distribution table
+svytable_design1j <- svytable(~friends, design = design1j)
+print(svytable_design1j)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table1j <- prop.table(svytable_design1j) * 100  
+print(round(weighted_proportion_table1j, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df1j <- as.data.frame(weighted_proportion_table1j)
+```
+
+
+
+**2. 1. FRIENDS - YES**
+
+```{r}
+friendsm<- male%>%
+  filter(friends == "1 Yes")
+```
+
+
+*a. Meet up*
+
+```{r}
+# Create the frequency distribution table
+frequency2j <- table(friendsm$fs326)
+print(frequency2j)
+
+# Define the survey design
+design2j <- svydesign(id = ~1, weights = ~stateindividualweight, data = friendsm)
+
+# Create a weighted frequency distribution table
+svytable_design2j <- svytable(~fs326, design = design2j)
+print(svytable_design2j)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table2j <- prop.table(svytable_design2j) * 100  
+print(round(weighted_proportion_table2j, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df2j <- as.data.frame(weighted_proportion_table2j)
+```
+
+
+*b. e-mail/call*
+
+```{r}
+# Create the frequency distribution table
+frequency3j <- table(friendsm$fs327)
+print(frequency3j)
+
+# Define the survey design
+design3j <- svydesign(id = ~1, weights = ~stateindividualweight, data = friendsm)
+
+# Create a weighted frequency distribution table
+svytable_design3j <- svytable(~fs327, design = design3j)
+print(svytable_design3j)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table3j <- prop.table(svytable_design3j) * 100  
+print(round(weighted_proportion_table3j, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df3j <- as.data.frame(weighted_proportion_table3j)
+```
+
+
+
+
+*(ii) Female*
+```{r}
+female <- female %>%
+  rename(friends = fs324)
+```
+
+
+```{r}
+# Create the frequency distribution table
+frequency1ja <- table(female$friends)
+print(frequency1ja)
+
+# Define the survey design
+design1ja <- svydesign(id = ~1, weights = ~stateindividualweight, data = female)
+
+# Create a weighted frequency distribution table
+svytable_design1ja <- svytable(~friends, design = design1ja)
+print(svytable_design1ja)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table1ja <- prop.table(svytable_design1ja) * 100  
+print(round(weighted_proportion_table1ja, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df1ja <- as.data.frame(weighted_proportion_table1ja)
+```
+
+
+
+**2. 1. FRIENDS - YES**
+
+```{r}
+friendsf<- female%>%
+  filter(friends == "1 Yes")
+```
+
+
+*a. Meet up*
+
+```{r}
+# Create the frequency distribution table
+frequency2ja <- table(friendsf$fs326)
+print(frequency2ja)
+
+# Define the survey design
+design2ja <- svydesign(id = ~1, weights = ~stateindividualweight, data = friendsf)
+
+# Create a weighted frequency distribution table
+svytable_design2ja <- svytable(~fs326, design = design2ja)
+print(svytable_design2ja)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table2ja <- prop.table(svytable_design2ja) * 100  
+print(round(weighted_proportion_table2ja, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df2ja <- as.data.frame(weighted_proportion_table2ja)
+```
+
+
+*b. e-mail/call*
+
+```{r}
+# Create the frequency distribution table
+frequency3ja <- table(friendsf$fs327)
+print(frequency3ja)
+
+# Define the survey design
+design3ja <- svydesign(id = ~1, weights = ~stateindividualweight, data = friendsf)
+
+# Create a weighted frequency distribution table
+svytable_design3ja <- svytable(~fs327, design = design3ja)
+print(svytable_design3ja)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table3ja <- prop.table(svytable_design3ja) * 100  
+print(round(weighted_proportion_table3ja, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df3ja <- as.data.frame(weighted_proportion_table3ja)
+```
+
+
+
+
+**II. Social Activities**
+
+
+**1. Member of any Social Group**
+
+*(i) Male*
+```{r}
+male<- male%>%
+  rename(social_grp = fs501)
+```
+
+```{r}
+# Create the frequency distribution table
+frequency4j <- table(male$social_grp)
+print(frequency4j)
+
+# Define the survey design
+design4j <- svydesign(id = ~1, weights = ~stateindividualweight, data = male)
+
+# Create a weighted frequency distribution table
+svytable_design4j <- svytable(~social_grp, design = design4j)
+print(svytable_design4j)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table4j <- prop.table(svytable_design4j) * 100  
+print(round(weighted_proportion_table4j, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df4j <- as.data.frame(weighted_proportion_table4j)
+```
+
+
+
+*(ii) Female*
+```{r}
+female<- female%>%
+  rename(social_grp = fs501)
+```
+
+```{r}
+# Create the frequency distribution table
+frequency4ja <- table(female$social_grp)
+print(frequency4ja)
+
+# Define the survey design
+design4ja <- svydesign(id = ~1, weights = ~stateindividualweight, data = female)
+
+# Create a weighted frequency distribution table
+svytable_design4ja <- svytable(~social_grp, design = design4ja)
+print(svytable_design4ja)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table4ja <- prop.table(svytable_design4ja) * 100  
+print(round(weighted_proportion_table4ja, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df4ja <- as.data.frame(weighted_proportion_table4ja)
+```
+
+
+
+
+
+**_____SOCIAL WELFARE SCHEME______**
+
+**I. AWARENESS**
+
+*(i) Male*
+
+*1. Awareness - Yes*
+```{r}
+awarem<- male%>%
+  filter(sw201a == "1 Yes" | sw201c == "1 Yes" |sw201d == "1 Yes" | sw201e == "1 Yes" )
+```
+
+*2. Awareness - No*
+```{r}
+unawarem<- male%>%
+  filter(sw201a == "2 No" & sw201c == "2 No" & sw201d == "2 No" & sw201e == "2 No")
+```
+
+
+```{r}
+# Calculate the frequency of "1 Yes" in any of the specified columns
+yes_freq2m <- male%>%
+  filter(sw201a == "1 Yes" | sw201c == "1 Yes" |sw201d == "1 Yes" | sw201e == "1 Yes") %>%
+  summarise(freq_yes2m = n())
+
+# Calculate the frequency of "2 No" in all of the specified columns
+no_freq2m <- male%>%
+  filter(sw201a == "2 No" & sw201c == "2 No" & sw201d == "2 No" & sw201e == "2 No") %>%
+  summarise(freq_no2m = n())
+
+# Print the results
+cat("Frequency '1 Yes':", yes_freq2m$freq_yes2m, "\n")
+cat("Frequency '2 No':", no_freq2m$freq_no2m, "\n")
+
+# Calculate the frequency of "1 Yes" in any of the specified columns
+yes_frequency2m <- male%>%
+  filter(sw201a == "1 Yes" |sw201c == "1 Yes" |sw201d == "1 Yes") %>%
+  summarise(freq_yes2m = sum(stateindividualweight))
+
+# Calculate the frequency of "2 No" in all of the specified columns
+no_frequency2m <- male%>%
+  filter(sw201a == "2 No" & sw201c == "2 No" & sw201d == "2 No" ) %>%
+  summarise(freq_no2m = sum(stateindividualweight))
+
+# Combine the frequencies and calculate the proportions
+total_responses2m <- sum(male$stateindividualweight)
+yes_proportion2m <- (yes_frequency2m$freq_yes2m / total_responses2m)*100
+no_proportion2m <- (no_frequency2m$freq_no2m / total_responses2m)*100
+
+# Create a data frame with the results
+results2m <- data.frame(
+  Response = c("1 Yes", "2 No", "NA"),
+  Weighted_Proportion = c(yes_proportion2m, no_proportion2m, 100 - (yes_proportion2m + no_proportion2m))
+)
+
+# Print the results
+print(results2m)
+
+```
+
+
+*(ii) Female*
+
+*1. Awareness - Yes*
+```{r}
+awaremf<- female%>%
+  filter(sw201a == "1 Yes" | (Gender == "2 Female" & sw201b == "1 Yes") |sw201c == "1 Yes" |sw201d == "1 Yes" | sw201e == "1 Yes" )
+```
+
+*2. Awareness - No*
+```{r}
+unawaremf<- female%>%
+  filter(sw201a == "2 No" & (Gender == "2 Female" & sw201b == "2 No") & sw201c == "2 No" & sw201d == "2 No" & sw201e == "2 No")
+```
+
+
+```{r}
+# Calculate the frequency of "1 Yes" in any of the specified columns
+yes_freq2mf <- female%>%
+  filter(sw201a == "1 Yes" | (Gender == "2 Female" & sw201b == "1 Yes")  |sw201c == "1 Yes" |sw201d == "1 Yes" | sw201e == "1 Yes") %>%
+  summarise(freq_yes2mf = n())
+
+# Calculate the frequency of "2 No" in all of the specified columns
+no_freq2mf <- female%>%
+  filter(sw201a == "2 No" & (Gender == "2 Female" & sw201b == "2 No")  & sw201c == "2 No" & sw201d == "2 No" & sw201e == "2 No") %>%
+  summarise(freq_no2mf = n())
+
+# Print the results
+cat("Frequency '1 Yes':", yes_freq2mf$freq_yes2mf, "\n")
+cat("Frequency '2 No':", no_freq2mf$freq_no2mf, "\n")
+
+# Calculate the frequency of "1 Yes" in any of the specified columns
+yes_frequency2mf <- female%>%
+  filter(sw201a == "1 Yes" | (Gender == "2 Female" & sw201b == "1 Yes")  |sw201c == "1 Yes" |sw201d == "1 Yes") %>%
+  summarise(freq_yes2mf = sum(stateindividualweight))
+
+# Calculate the frequency of "2 No" in all of the specified columns
+no_frequency2mf <- female%>%
+  filter(sw201a == "2 No" & (Gender == "2 Female" & sw201b == "2 No")  & sw201c == "2 No" & sw201d == "2 No" ) %>%
+  summarise(freq_no2mf = sum(stateindividualweight))
+
+# Combine the frequencies and calculate the proportions
+total_responses2mf <- sum(female$stateindividualweight)
+yes_proportion2mf <- (yes_frequency2mf$freq_yes2mf / total_responses2mf)*100
+no_proportion2mf <- (no_frequency2mf$freq_no2mf / total_responses2mf)*100
+
+# Create a data frame with the results
+results2mf <- data.frame(
+  Response = c("1 Yes", "2 No", "NA"),
+  Weighted_Proportion = c(yes_proportion2mf, no_proportion2mf, 100 - (yes_proportion2mf + no_proportion2mf))
+)
+
+# Print the results
+print(results2mf)
+```
+
+
+
+
+**II. BENEFICIARIES**
+
+*(i) Male*
+
+*1. Beneficiaries - Yes*
+```{r}
+benefit_yesm<- awarem%>%
+  filter(sw202a == "1 Yes" | sw202c == "1 Yes" |sw202d == "1 Yes" | sw202e == "1 Yes" )
+```
+
+*2. Beneficiaries - No*
+```{r}
+benefit_nom<- awarem%>%
+  filter(sw202a == "2 No" & sw202c == "2 No" & sw202d == "2 No" & sw202e == "2 No")
+```
+
+
+```{r}
+# Calculate the frequency of "1 Yes" in any of the specified columns
+yes_freq3 <- awarem%>%
+  filter(sw202a == "1 Yes" |sw202c == "1 Yes" |sw202d == "1 Yes" | sw202e == "1 Yes") %>%
+  summarise(freq_yes3 = n())
+
+# Calculate the frequency of "2 No" in all of the specified columns
+no_freq3 <- awarem%>%
+  filter(sw202a == "2 No" & sw202c == "2 No" & sw202d == "2 No" & sw202e == "2 No") %>%
+  summarise(freq_no3 = n())
+
+# Print the results
+cat("Frequency '1 Yes':", yes_freq3$freq_yes3, "\n")
+cat("Frequency '2 No':", no_freq3$freq_no3, "\n")
+
+# Calculate the frequency of "1 Yes" in any of the specified columns
+yes_frequency3 <- awarem%>%
+  filter(sw202a == "1 Yes" | sw202c == "1 Yes" |sw202d == "1 Yes" | sw202e == "1 Yes") %>%
+  summarise(freq_yes3 = sum(stateindividualweight))
+
+# Calculate the frequency of "2 No" in all of the specified columns
+no_frequency3 <- awarem%>%
+  filter(sw202a == "2 No" & sw202c == "2 No" & sw202d == "2 No" & sw202e == "2 No") %>%
+  summarise(freq_no3 = sum(stateindividualweight))
+
+# Combine the frequencies and calculate the proportions
+total_responses3 <- sum(awarem$stateindividualweight)
+yes_proportion3 <- (yes_frequency3$freq_yes3 / total_responses3)*100
+no_proportion3 <- (no_frequency3$freq_no3 / total_responses3)*100
+
+# Create a data frame with the results
+results3 <- data.frame(
+  Response = c("1 Yes", "2 No", "NA"),
+  Weighted_Proportion = c(yes_proportion3, no_proportion3, 100 - (yes_proportion3 + no_proportion3))
+)
+
+# Print the results
+print(results3)
+
+```
+
+
+
+*(ii) Female*
+
+*1. Beneficiaries - Yes*
+```{r}
+benefit_yesmf<- awaremf%>%
+  filter(sw202a == "1 Yes" | (Gender == "2 Female" & sw201b == "1 Yes")  |sw202c == "1 Yes" |sw202d == "1 Yes" | sw202e == "1 Yes" )
+```
+
+*2. Beneficiaries - No*
+```{r}
+benefit_nomf<- awaremf%>%
+  filter(sw202a == "2 No" & (Gender == "2 Female" & sw201b == "1 Yes")  & sw202c == "2 No" & sw202d == "2 No" & sw202e == "2 No")
+```
+
+
+```{r}
+# Calculate the frequency of "1 Yes" in any of the specified columns
+yes_freq3a <- awaremf%>%
+  filter(sw202a == "1 Yes" |(Gender == "2 Female" & sw201b == "1 Yes")  | sw202c == "1 Yes" |sw202d == "1 Yes" | sw202e == "1 Yes") %>%
+  summarise(freq_yes3a = n())
+
+# Calculate the frequency of "2 No" in all of the specified columns
+no_freq3a <- awaremf%>%
+  filter(sw202a == "2 No" & sw202c == "2 No" & (Gender == "2 Female" & sw201b == "1 Yes") & sw202d == "2 No" & sw202e == "2 No") %>%
+  summarise(freq_no3a = n())
+
+# Print the results
+cat("Frequency '1 Yes':", yes_freq3a$freq_yes3a, "\n")
+cat("Frequency '2 No':", no_freq3a$freq_no3a, "\n")
+
+# Calculate the frequency of "1 Yes" in any of the specified columns
+yes_frequency3a <- awaremf%>%
+  filter(sw202a == "1 Yes" | sw202c == "1 Yes" |(Gender == "2 Female" & sw201b == "1 Yes")  | sw202d == "1 Yes" | sw202e == "1 Yes") %>%
+  summarise(freq_yes3a = sum(stateindividualweight))
+
+# Calculate the frequency of "2 No" in all of the specified columns
+no_frequency3a <- awaremf%>%
+  filter(sw202a == "2 No" & sw202c == "2 No" & (Gender == "2 Female" & sw201b == "1 Yes")  & sw202d == "2 No" & sw202e == "2 No") %>%
+  summarise(freq_no3a = sum(stateindividualweight))
+
+# Combine the frequencies and calculate the proportions
+total_responses3a <- sum(awaremf$stateindividualweight)
+yes_proportion3a <- (yes_frequency3a$freq_yes3a / total_responses3a)*100
+no_proportion3a <- (no_frequency3a$freq_no3a / total_responses3a)*100
+
+# Create a data frame with the results
+results3a <- data.frame(
+  Response = c("1 Yes", "2 No", "NA"),
+  Weighted_Proportion = c(yes_proportion3a, no_proportion3a, 100 - (yes_proportion3a + no_proportion3a))
+)
+
+# Print the results
+print(results3a)
+
+```
+
+
+
+**III. CONCESSIONS**
+
+*(i) Male*
+```{r}
+# Create the frequency distribution table
+frequency1m <- table(male$sw211)
+print(frequency1m)
+
+# Define the survey design
+design1m <- svydesign(id = ~1, weights = ~stateindividualweight, data = male)
+
+# Create a weighted frequency distribution table
+svytable_design1m <- svytable(~sw211, design = design1m)
+print(svytable_design1m)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table1m <- prop.table(svytable_design1m) * 100  
+print(round(weighted_proportion_table1m, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df1m <- as.data.frame(weighted_proportion_table1m)
+```
+
+
+*(ii) Female*
+```{r}
+# Create the frequency distribution table
+frequency1mf <- table(female$sw211)
+print(frequency1mf)
+
+# Define the survey design
+design1mf <- svydesign(id = ~1, weights = ~stateindividualweight, data = female)
+
+# Create a weighted frequency distribution table
+svytable_design1mf <- svytable(~sw211, design = design1mf)
+print(svytable_design1mf)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table1mf <- prop.table(svytable_design1mf) * 100  
+print(round(weighted_proportion_table1mf, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df1mf <- as.data.frame(weighted_proportion_table1mf)
+```
+
+
+**1. Aware/heard about the “Maintenance and Welfare of Parents and Senior Citizens Act”**
+
+*(i) Male*
+```{r}
+# Create the frequency distribution table
+frequency2m <- table(male$sw213)
+print(frequency2m)
+
+# Define the survey design
+design2m <- svydesign(id = ~1, weights = ~stateindividualweight, data = male)
+
+# Create a weighted frequency distribution table
+svytable_design2m <- svytable(~sw213, design = design2m)
+print(svytable_design2m)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table2m <- prop.table(svytable_design2m) * 100  
+print(round(weighted_proportion_table2m, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df2m <- as.data.frame(weighted_proportion_table2m)
+```
+
+
+*(ii) Female*
+```{r}
+# Create the frequency distribution table
+frequency2mf <- table(female$sw213)
+print(frequency2mf)
+
+# Define the survey design
+design2mf <- svydesign(id = ~1, weights = ~stateindividualweight, data = female)
+
+# Create a weighted frequency distribution table
+svytable_design2mf <- svytable(~sw213, design = design2mf)
+print(svytable_design2mf)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table2mf <- prop.table(svytable_design2mf) * 100  
+print(round(weighted_proportion_table2mf, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df2mf <- as.data.frame(weighted_proportion_table2mf)
+```

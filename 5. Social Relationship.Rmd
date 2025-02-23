@@ -1,0 +1,642 @@
+---
+title: "Social Relationship"
+author: "Mizza"
+date: "2024-06-14"
+output: html_document
+---
+
+```{r}
+#| label: setup
+#| warning: false
+#| echo: false
+
+library(ggplot2)
+library(readxl)
+library(dplyr)
+library(tidyverse)
+library(tidyr)
+library(survey)
+library(ggsankey)
+
+Household <- read_excel("C:/Users/mizza/OneDrive/Desktop/CMD/2. LASI/2_LASI_W1_Household_v4 1.xlsx")
+Individual <- read_excel("C:/Users/mizza/OneDrive/Desktop/CMD/2. LASI/3_LASI_W1_Individual_data 1.xlsx")
+merged_data <- merge (Individual, Household, by = "hhid", all = TRUE)
+roster <- read_excel ("C:/Users/mizza/OneDrive/Desktop/CMD/2. LASI/1_LASI_W1_HH_roster 1.xlsx")
+final_data <- merge (merged_data, roster, by = "hhid", all = TRUE)
+```
+
+
+**DATA OF VULNERABLE GROUP - SENIOR CITIZENS**
+
+```{r}
+final_data <- final_data%>%
+  rename(Age = dm005)
+```
+
+```{r}
+
+##TO APPLY AGE FILTER##
+create_age_category <- function(Age) {
+  if (is.na(Age)) {
+    return(NA)
+  }
+  
+  if (Age >= 60 & Age <= 69) {
+    return("Young Old")
+  } else if (Age >= 70 & Age <= 79) {
+    return("Old")
+  } else if (Age >= 80) {
+    return("Very Old")
+  } else {
+    return(NA) 
+  }
+}
+final_data$AgeCategory <- sapply(final_data$Age, create_age_category)
+
+final_data <- final_data[final_data$AgeCategory %in% c("Young Old", "Old", "Very Old"), ]
+```
+
+
+**EDUCATION BUCKET**
+
+```{r}
+final_data <- final_data %>%
+  mutate(Education_level = case_when(
+    dm006 == "2 No" ~ "Uneducated",
+    dm008 %in% c("1 Less than Primary (Standard 1-4)", 
+                 "2 Primary Completed (Standard 5-7)", 
+                 "3 Middle Completed (Standard 8- 9)") ~ "Primary School",
+    dm008 == "4 Secondary School/Matriculation completed" ~ "Secondary School",
+    dm008 %in% c("5 Higher Secondary/Intermediate/Senior Secondary completed", 
+                 "6 Diploma and certificate holders") ~ "Senior Secondary School",
+    dm008 %in% c("7 Graduate degree (B.A., B.Sc., B. Com.) completed", 
+                 "8 Post-graduate degree or (M.A., M.Sc., M. Com.) above (M.Phil, Ph.D., Post-Doc) completed", 
+                 "9 Professional course/degree (B.Ed, BE, B.Tech, MBBS, BHMS, BAMS, B.Pharm, BCS, BCA, BBA, LLB, BVSc., B. Arch, M.Ed, ME, M.Tech, MD, M.Pharm, MCS, MCA, MBA,LLM, MVSc., M. Arch, MS, CA, CS, CWA)Completed") ~ "Tertiary Education",
+    TRUE ~ "Other"
+  ))
+```
+
+
+
+**I. Interaction with friends and family**
+
+**1. Close Relationship**
+
+```{r}
+final_data <- final_data %>%
+  rename(family = fs323)
+```
+
+**1. Family Relation - Yes**
+```{r}
+fam_relation_yes<- final_data%>%
+  filter(fs323s1 == "1 Yes"| fs323s2 == "1 Yes"|fs323s3 == "1 Yes"|fs323s4 == "1 Yes"|fs323s5 == "1 Yes"|fs323s6 == "1 Yes"|fs323s7 == "1 Yes"|fs323s8 == "1 Yes"|fs323s9 == "1 Yes"|fs323s10 == "1 Yes"|fs323s11 == "1 Yes"|fs323s12 == "1 Yes"|fs323s13 == "1 Yes" )
+```
+
+**2. Friends Relation - Yes**
+```{r}
+frnds_relation_yes<- final_data%>%
+  filter(fs323s14 == "1 Yes")
+```
+
+**3. Relation with nobody**
+```{r}
+relation_no<- final_data%>%
+  filter(fs323s16 == "1 Yes")
+```
+
+
+*Close relation with anybody*
+```{r}
+# Calculate the frequency of "1 Yes" in any of the specified columns
+yes_freq1 <- final_data%>%
+  filter(fs323s1 == "1 Yes"| fs323s2 == "1 Yes"|fs323s3 == "1 Yes"|fs323s4 == "1 Yes"|fs323s5 == "1 Yes"|fs323s6 == "1 Yes"|fs323s7 == "1 Yes"|fs323s8 == "1 Yes"|fs323s9 == "1 Yes"|fs323s10 == "1 Yes"|fs323s11 == "1 Yes"|fs323s12 == "1 Yes"|fs323s13 == "1 Yes"|fs323s14 == "1 Yes"|fs323s15 == "1 Yes") %>%
+  summarise(freq_yes1 = n())
+
+# Calculate the frequency of "2 No" in all of the specified columns
+no_freq1 <- final_data%>%
+  filter(fs323s16 == "1 Yes" ) %>%
+  summarise(freq_no1 = n())
+
+# Print the results
+cat("Frequency '1 Yes':", yes_freq1$freq_yes1, "\n")
+cat("Frequency '2 No':", no_freq1$freq_no1, "\n")
+
+# Calculate the frequency of "1 Yes" in any of the specified columns
+yes_frequency1 <- final_data%>%
+  filter(fs323s1 == "1 Yes"| fs323s2 == "1 Yes"|fs323s3 == "1 Yes"|fs323s4 == "1 Yes"|fs323s5 == "1 Yes"|fs323s6 == "1 Yes"|fs323s7 == "1 Yes"|fs323s8 == "1 Yes"|fs323s9 == "1 Yes"|fs323s10 == "1 Yes"|fs323s11 == "1 Yes"|fs323s12 == "1 Yes"|fs323s13 == "1 Yes"|fs323s14 == "1 Yes"|fs323s15 == "1 Yes") %>%
+  summarise(freq_yes1 = sum(stateindividualweight))
+
+# Calculate the frequency of "2 No" in all of the specified columns
+no_frequency1 <- final_data%>%
+  filter(fs323s16 == "1 Yes") %>%
+  summarise(freq_no1 = sum(stateindividualweight))
+
+# Combine the frequencies and calculate the proportions
+total_responses1 <- sum(final_data$stateindividualweight)
+yes_proportion1 <- (yes_frequency1$freq_yes1 / total_responses1)*100
+no_proportion1 <- (no_frequency1$freq_no1 / total_responses1)*100
+
+# Create a data frame with the results
+results1 <- data.frame(
+  Response = c("1 Yes", "0 No", "NA"),
+  Weighted_Proportion = c(yes_proportion1, no_proportion1, 100 - (yes_proportion1 + no_proportion1))
+)
+
+# Print the results
+print(results1)
+
+
+```
+
+
+
+
+**2. Friends**
+
+```{r}
+final_data <- final_data %>%
+  rename(friends = fs324)
+```
+
+
+```{r}
+count_friends <- sum(!is.na(final_data$friends))
+
+# Print the result
+print(count_friends)
+
+# Create the frequency distribution table
+frequency1 <- table(final_data$friends)
+print(frequency1)
+
+# Proportion table
+proportion_table1 <- prop.table(frequency1) * 100  
+print(round(proportion_table1, digits=2))
+
+# Define the survey design
+design1 <- svydesign(id = ~1, weights = ~stateindividualweight, data = final_data)
+
+# Create a weighted frequency distribution table
+svytable_design1 <- svytable(~friends, design = design1)
+print(svytable_design1)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table1 <- prop.table(svytable_design1) * 100  
+print(round(weighted_proportion_table1, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df1 <- as.data.frame(weighted_proportion_table1)
+```
+
+
+
+**2. 1. FRIENDS - YES**
+
+```{r}
+friends<- final_data%>%
+  filter(friends == "1 Yes")
+```
+
+
+*a. Meet up*
+
+```{r}
+count_fs326 <- sum(!is.na(friends$fs326))
+
+# Print the result
+print(count_fs326)
+
+# Create the frequency distribution table
+frequency2 <- table(friends$fs326)
+print(frequency2)
+
+# Define the survey design
+design2 <- svydesign(id = ~1, weights = ~stateindividualweight, data = friends)
+
+# Create a weighted frequency distribution table
+svytable_design2 <- svytable(~fs326, design = design2)
+print(svytable_design2)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table2 <- prop.table(svytable_design2) * 100  
+print(round(weighted_proportion_table2, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df2 <- as.data.frame(weighted_proportion_table2)
+```
+
+
+*b. e-mail/call*
+
+```{r}
+count_fs327 <- sum(!is.na(friends$fs327))
+
+# Print the result
+print(count_fs327)
+
+# Create the frequency distribution table
+frequency3 <- table(friends$fs327)
+print(frequency3)
+
+# Define the survey design
+design3 <- svydesign(id = ~1, weights = ~stateindividualweight, data = friends)
+
+# Create a weighted frequency distribution table
+svytable_design3 <- svytable(~fs327, design = design3)
+print(svytable_design3)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table3 <- prop.table(svytable_design3) * 100  
+print(round(weighted_proportion_table3, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df3 <- as.data.frame(weighted_proportion_table3)
+```
+
+
+
+
+
+**II. Social Activities**
+
+
+**1. Member of any Social Group**
+
+```{r}
+final_data<- final_data%>%
+  rename(social_grp = fs501)
+```
+
+```{r}
+count_social_grp <- sum(!is.na(final_data$social_grp))
+
+# Print the result
+print(count_social_grp)
+
+# Create the frequency distribution table
+frequency4 <- table(final_data$social_grp)
+print(frequency4)
+
+# Define the survey design
+design4 <- svydesign(id = ~1, weights = ~stateindividualweight, data = final_data)
+
+# Create a weighted frequency distribution table
+svytable_design4 <- svytable(~social_grp, design = design4)
+print(svytable_design4)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table4 <- prop.table(svytable_design4) * 100  
+print(round(weighted_proportion_table4, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df4 <- as.data.frame(weighted_proportion_table4)
+```
+
+
+
+**2. Involvement in any Social Activities **
+
+*1. Eat out of the house*
+```{r}
+final_data<- final_data%>%
+  rename(Eat_out_of_the_house = fs504)
+```
+
+```{r}
+count_Eat_out_of_the_house <- sum(!is.na(final_data$Eat_out_of_the_house))
+
+# Print the result
+print(count_Eat_out_of_the_house)
+
+# Create the frequency distribution table
+frequency4a <- table(final_data$Eat_out_of_the_house)
+print(frequency4a)
+
+# Define the survey design
+design4a <- svydesign(id = ~1, weights = ~stateindividualweight, data = final_data)
+
+# Create a weighted frequency distribution table
+svytable_design4a <- svytable(~Eat_out_of_the_house, design = design4a)
+print(svytable_design4a)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table4a <- prop.table(svytable_design4a) * 100  
+print(round(weighted_proportion_table4a, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df4a <- as.data.frame(weighted_proportion_table4a)
+```
+
+
+*2. Go to park/beach for relaxing/entertainment *
+```{r}
+final_data<- final_data%>%
+  rename(Go_to_park_beach_for_relaxing_entertainment = fs505)
+```
+
+```{r}
+# Create the frequency distribution table
+frequency4b <- table(final_data$Go_to_park_beach_for_relaxing_entertainment)
+print(frequency4b)
+
+# Define the survey design
+design4b <- svydesign(id = ~1, weights = ~stateindividualweight, data = final_data)
+
+# Create a weighted frequency distribution table
+svytable_design4b <- svytable(~Go_to_park_beach_for_relaxing_entertainment, design = design4b)
+print(svytable_design4b)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table4b <- prop.table(svytable_design4b) * 100  
+print(round(weighted_proportion_table4b, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df4b <- as.data.frame(weighted_proportion_table4b)
+```
+
+
+*3.  Play cards or indoor games*
+```{r}
+final_data<- final_data%>%
+  rename(Play_cards_or_indoor_games = fs506)
+```
+
+```{r}
+# Create the frequency distribution table
+frequency4c <- table(final_data$Play_cards_or_indoor_games)
+print(frequency4c)
+
+# Define the survey design
+design4c <- svydesign(id = ~1, weights = ~stateindividualweight, data = final_data)
+
+# Create a weighted frequency distribution table
+svytable_design4c <- svytable(~Play_cards_or_indoor_games, design = design4c)
+print(svytable_design4c)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table4c <- prop.table(svytable_design4c) * 100  
+print(round(weighted_proportion_table4c, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df4c <- as.data.frame(weighted_proportion_table4c)
+```
+
+
+*4.  Play out door games/sports/exercise/jog/yoga*
+```{r}
+final_data<- final_data%>%
+  rename(Play_out_door = fs507)
+```
+
+```{r}
+# Create the frequency distribution table
+frequency4d <- table(final_data$Play_out_door)
+print(frequency4d)
+
+# Define the survey design
+design4d <- svydesign(id = ~1, weights = ~stateindividualweight, data = final_data)
+
+# Create a weighted frequency distribution table
+svytable_design4d <- svytable(~Play_out_door, design = design4d)
+print(svytable_design4d)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table4d <- prop.table(svytable_design4d) * 100  
+print(round(weighted_proportion_table4d, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df4d <- as.data.frame(weighted_proportion_table4d)
+```
+
+
+*5. Visit relatives /friends*
+```{r}
+final_data<- final_data%>%
+  rename(Visit_relatives_friends = fs508)
+```
+
+```{r}
+# Create the frequency distribution table
+frequency4e <- table(final_data$Visit_relatives_friends)
+print(frequency4e)
+
+# Define the survey design
+design4e <- svydesign(id = ~1, weights = ~stateindividualweight, data = final_data)
+
+# Create a weighted frequency distribution table
+svytable_design4e <- svytable(~Visit_relatives_friends, design = design4e)
+print(svytable_design4e)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table4e <- prop.table(svytable_design4e) * 100  
+print(round(weighted_proportion_table4e, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df4e <- as.data.frame(weighted_proportion_table4e)
+```
+
+
+*6. Attend cultural performances /shows/Cinema*
+```{r}
+final_data<- final_data%>%
+  rename(Attend_cultural_performances= fs509)
+```
+
+```{r}
+# Create the frequency distribution table
+frequency4f <- table(final_data$Attend_cultural_performances)
+print(frequency4f)
+
+# Define the survey design
+design4f <- svydesign(id = ~1, weights = ~stateindividualweight, data = final_data)
+
+# Create a weighted frequency distribution table
+svytable_design4f <- svytable(~Attend_cultural_performances, design = design4f)
+print(svytable_design4f)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table4f <- prop.table(svytable_design4f) * 100  
+print(round(weighted_proportion_table4f, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df4f <- as.data.frame(weighted_proportion_table4f)
+```
+
+
+*7.  Attend religious functions /events such as bhajan/satsang/prayer*
+```{r}
+final_data<- final_data%>%
+  rename(Attend_religious_functions = fs510)
+```
+
+```{r}
+# Create the frequency distribution table
+frequency4g <- table(final_data$Attend_religious_functions)
+print(frequency4g)
+
+# Define the survey design
+design4g <- svydesign(id = ~1, weights = ~stateindividualweight, data = final_data)
+
+# Create a weighted frequency distribution table
+svytable_design4g <- svytable(~Attend_religious_functions, design = design4g)
+print(svytable_design4g)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table4g <- prop.table(svytable_design4g) * 100  
+print(round(weighted_proportion_table4g, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df4g <- as.data.frame(weighted_proportion_table4g)
+```
+
+
+*8. Attend political/community/organization group meetings*
+```{r}
+final_data<- final_data%>%
+  rename(Attend_group_meetings = fs511)
+```
+
+```{r}
+# Create the frequency distribution table
+frequency4h <- table(final_data$Attend_group_meetings)
+print(frequency4h)
+
+# Define the survey design
+design4h <- svydesign(id = ~1, weights = ~stateindividualweight, data = final_data)
+
+# Create a weighted frequency distribution table
+svytable_design4h <- svytable(~Attend_group_meetings, design = design4h)
+print(svytable_design4h)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table4h <- prop.table(svytable_design4h) * 100  
+print(round(weighted_proportion_table4h, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df4h <- as.data.frame(weighted_proportion_table4h)
+```
+
+
+*9. .Read books/newspapers/magazines*
+```{r}
+# Create the frequency distribution table
+frequency4i <- table(final_data$fs512)
+print(frequency4i)
+
+# Define the survey design
+design4i <- svydesign(id = ~1, weights = ~stateindividualweight, data = final_data)
+
+# Create a weighted frequency distribution table
+svytable_design4i <- svytable(~fs512, design = design4i)
+print(svytable_design4i)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table4i <- prop.table(svytable_design4i) * 100  
+print(round(weighted_proportion_table4i, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df4i <- as.data.frame(weighted_proportion_table4i)
+```
+
+
+*10. Watch television/listen radio*
+```{r}
+# Create the frequency distribution table
+frequency4j <- table(final_data$fs513)
+print(frequency4j)
+
+# Define the survey design
+design4j <- svydesign(id = ~1, weights = ~stateindividualweight, data = final_data)
+
+# Create a weighted frequency distribution table
+svytable_design4j <- svytable(~fs513, design = design4j)
+print(svytable_design4j)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table4j <- prop.table(svytable_design4j) * 100  
+print(round(weighted_proportion_table4j, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df4j <- as.data.frame(weighted_proportion_table4j)
+```
+
+
+*11.Use a computer for e-mail/net surfing etc.*
+```{r}
+# Create the frequency distribution table
+frequency4k <- table(final_data$fs514)
+print(frequency4k)
+
+# Define the survey design
+design4k <- svydesign(id = ~1, weights = ~stateindividualweight, data = final_data)
+
+# Create a weighted frequency distribution table
+svytable_design4k <- svytable(~fs514, design = design4k)
+print(svytable_design4k)
+
+# Proportion table from the weighted frequency distribution
+weighted_proportion_table4k <- prop.table(svytable_design4k) * 100  
+print(round(weighted_proportion_table4k, digits=2))
+
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df4k <- as.data.frame(weighted_proportion_table4k)
+```
+
+```{r}
+# Using dplyr to create the new column with the total score
+final_data <- final_data %>%
+  mutate(Social_activity_INDEX = rowSums(across(c("Eat_out_of_the_house","Go_to_park_beach_for_relaxing_entertainment","Play_cards_or_indoor_games","Play_out_door", "Visit_relatives_friends", "Attend_cultural_performances", "Attend_religious_functions", "Attend_group_meetings"),
+                                                        ~ ifelse(. == "7 Never/Not relevant		
+", 0,
+                                                                 ifelse(. == "1 Daily		
+", 7,
+                                                                        ifelse(. == "2 Several times a week", 6,
+                                                                               ifelse(. == "3 Once a week", 5,
+                                                                                      ifelse(. == "4 Several times a month", 4,
+                                                                                             ifelse(. == "5 At least once a month", 3,
+                                                                                                    ifelse(. == "6 Rarely/Once in a year", 2,
+                                                                                             ifelse(. == "5 Less than once a year", 1, NA)))))))))))                                                                         
+                                                      
+
+# Define the survey design
+design <- svydesign(id = ~1, weights = ~stateindividualweight, data = final_data)
+
+# Corrected variable name usage
+Social_activity_INDEX_vars <- c("Social_activity_INDEX") # This should match the column name created in mutate
+
+# Initialize an empty list to store the proportion tables
+proportion_tables <- list()
+
+# Generate and store the proportion table for each variable
+for (var_name in Social_activity_INDEX_vars) {
+  # Construct the formula directly using the variable name
+  var_formula <- as.formula(paste0("~", var_name))
+  
+  # Use the formula in svytable to get the frequency table
+  freq_table <- svytable(var_formula, design = design)
+  
+  # Convert the frequency table to proportions and store it in the list
+  proportion_tables[[paste0(var_name, "_proportions")]] <- freq_table / sum(freq_table)
+}
+
+# Combine the proportion tables into a single table
+combined_proportion_table_Social_activity_INDEX <- do.call(rbind, lapply(proportion_tables, function(table) {
+  # Add a column for the variable name
+  table$Variable <- rep(names(proportion_tables), each = nrow(table) / length(proportion_tables))
+  return(table)
+}))
+
+# Print the combined proportion table
+print(combined_proportion_table_Social_activity_INDEX)
+                                                  
+# Convert weighted_proportion_table to a data frame
+weighted_proportion_df <- as.data.frame(combined_proportion_table_Social_activity_INDEX)                                      
+```
+
+**III. LONELINESS**
+
+```{r}
+loneliness<- final_data%>%
+  filter(fs323s16 == "1 Yes" & friends == "2 No" & fs326 == "5 Never" & fs327 == "5 Never" & social_grp == "2 No" & Eat_out_of_the_house == "7 Never/Not relevant" & Go_to_park_beach_for_relaxing_entertainment == "7 Never/Not relevant" & Play_cards_or_indoor_games == "7 Never/Not relevant"& Play_out_door == "7 Never/Not relevant"& Visit_relatives_friends == "7 Never/Not relevant" & Attend_cultural_performances == "7 Never/Not relevant" & Attend_religious_functions== "7 Never/Not relevant"& Attend_group_meetings == "7 Never/Not relevant")
+```
